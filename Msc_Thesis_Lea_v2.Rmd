@@ -1,0 +1,629 @@
+---
+title: "Cross-sectoral conservation of the Indian Ocean"
+author: "Lea Fourchault"
+date: "02/02/2022"
+output: html_document
+---
+<style type="text/css">
+
+body{ /* Normal  */
+      font-size: 12px;
+  }
+td {  /* Table  */
+  font-size: 12px;
+}
+h1.title {
+  font-size: 34px;
+  color: Black;
+}
+h1 { /* Header 1 */
+  font-size: 24px;
+  color: Black;
+}
+h2 { /* Header 2 */
+    font-size: 20px;
+  color: Black;
+}
+h3 { /* Header 3 */
+  font-size: 14px;
+  color: Black;
+}
+code.r{ /* Code block */
+    font-size: 11px;
+}
+pre { /* Code block - determines code spacing between lines */
+    font-size: 14px;
+}
+</style>
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Table of Contents
+# Introduction
+# Materials & Methods
+## Workflow with Prioritizr 
+## Overview of data  & layers
+## Planning region 
+## Conservation features & targets
+### IBAs
+### IMMAs
+### EBSAs
+### Deep-sea features : seamounts, ridges, plateaus, vents 
+## Cost layer
+### CFC
+### PMN
+### Exploration areas
+### Reserved areas
+### Shipping
+### Fishing *use cost layer already created?*
+# Prioritizr problems
+### Basic run (only Cons features)
+### Cons features, fishing
+### Cons features, mining (lock-out expl  & res areas; assign cost for PMN areas)
+### Cons features, fishing + mining 
+### Cons features, shipping 
+# Discussion
+## Potential improvements
+# Conclusion
+
+---
+
+Current questions:
+
++ how to group all files (ex: all EBSAs + IBAs + IMMAs + vents + seamounts...) into one, to create ConsFeatures?
++ should we use Sharma (2011) + CRU Consulting (2019) to assign USD values to PMN areas? see PMN subsection
++ shipping raster (Halpern et al., 2013) is too heavy to be converted to polygon, what coupd be other methods (not using as.polygon)?
++ shipping raster : cells have certain values (# of ships recorded??I will check for Tuesday), could allow to infer USD value of route (# of ships * approx cost of fuel for average cargo to go through 1 PU, which is 1000sqkm)? So we wouldn't try to compute the cost of deviating from any given route, but rather compute the price for each ship to go through 1 PU * the number of ships going through that PU. It sounds fairly logical to me, but maybe it's not?
++ fishing cost layer : there is a ready-made fx in SpatPlan repo (thanks Jase & Tin), should we use it for this project? see fishing subsection (but issues with plotting  as you can see)
+
+# Introduction
+
+This project aims to identify areas for MPAs that maximise the conservation of biologically and ecologically important areas in the Indian Ocean's ABNJS, across all depths, while minimizing conflict with local industrial stakeholders - including the fishing, shipping, and deep-sea mining industries. 
+
+Why ABNJs?
+
++ to reach the global target of 30% marine protection, ABNJs are optimal (largest area; common good: higher incentive to protect since lower opportunity cost for individual countries)
+
+Why the Indian Ocean?
+
++ numerous ecosystems providing important services and unique biodiversity, but few already existing MPAs within EEZs and none in ABNJs
++ active exploration of PMN & CFC for deep sea mining but no plan for conservation linked to deep-sea mining (unlike Pacific)
++ many stakeholders present (increasingly dense shipping routes, fishing activity, deep-sea mining): higher risk of conflict: prioritization approach should be useful
+
+Why considering all depth layers? 
+
++ despite unique biodiversity, the deep sea is often ignored in MPA design
++ the deep sea increasingly at risk from anthropogenic disturbances
++ we need to consider all layers to ensure vertical connectivity
++ the implementation of MPAs is only feasible on surface level (makes no sense to focus only on deep-sea, even if major preoccupation is benthic or at high depth).
+
+Why considering multiple stakeholders?
+
++ so far, most MPA design is based on the fishing industry alone (despite some rather unsuccessful attempts to include tourism or other industries)
++ deep-sea mining has not yet been considered in MPA design by prioritization, despite major foreseen impacts on marine biodiversity
++ shipping routes (cargo, tankers, tourism) also disturb marine fauna, especially charismatic megafauna
+
+```{r, cache = FALSE, echo = FALSE, results = "hide", message = FALSE}
+#Open all the packages and get extras
+options(repos = list(CRAN="http://cran.rstudio.com/")) 
+library(tidyverse)
+library(sf)
+library(patchwork)
+library(terra)
+library(stars)
+library(rnaturalearth)
+library(rnaturalearthdata)
+library(prioritizr)
+library(knitr)
+
+source("SpatPlan_Extras.R")
+
+fSpatPlan_Get_Polyg <- function(filen, PUs){
+  
+  polyg_crs <- st_crs(PUs)
+  Polyg1 <- st_read(filen) %>% 
+    st_transform(polyg_crs) 
+  
+  Polyg1PUs <- PUs %>% 
+    st_centroid() %>% #Second, get all the PUs with < 50 % area on land #?
+    st_within(Polyg1, sparse = FALSE) %>% 
+    rowSums() %>%
+    as.logical()
+  
+  # Polyg1PUs <- PUs %>% 
+  #   mutate(locked_in = Polyg1PUs) ##assign new column to PUs (call it name of shp)
+  # 
+  return(Polyg1PUs)
+}
+```
+
+# Materials and Methods
+
+## Prioritizr workflow
+
+Inputs needed:
+
++ planning region & PUs
++ conservation features & conservation targets
++ cost layer
+
+## Layers overview
+
+still need to 
+
++ **select specific fishing rasters (bycatch/demersal...)/ use the fishing cost layer  already created in Spatial Planning repo**
++ and **select specific benthic shps (seamounts, ridges, plateaus, vents?)**
++ **need to create subset without inactive vents** *filter fx not working because object=character, will ask on Slack*
+
+blue habitats **do not include hydro vents**, so will use Beaulieu & Szanfranski (2020) [link](https://doi.pangaea.de/10.1594/PANGAEA.917894?format=html#download)
+
+
+Input type   |  Topic                 | Reference/source (format)
+:-----------:|:----------------------:|:----------------------------------:
+ COST        |  Expl + Res (mining)   |  ISA (shp)
+ COST        |  PMN & CFC (mining)    |  Petersen et al., 2016 (shp)
+ COST        |  Shipping              |  Halpern et al., 2013 (tif)
+ COST        |  Fishing               |  Halpern et al., 2013 (tif)
+ CONS        |  IBAs                  |  Birdlife datazone (shp)
+ CONS        |  IMMAs                 |  importantmarinemammalhabitat (shp)
+ CONS        |  EBSAs                 |  CBD (shp)
+ CONS        |  Benthic features      |  Blue Habitats (shp)
+ CONS        |  Longhurst provinces ? |  Marine Regions (shp)
+ CONS        |  Vents                 |  Beaulieu & Szanfranski (2020) (csv)
+
+## Planning region 
+
+```{r Planning Region, echo = TRUE, message = FALSE, results = "hide", warning = FALSE}
+
+cCRS <- "+proj=robin +lon_0=0 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs" # Robinson projection
+world <- ne_countries(scale = "medium", returnclass = "sf") %>% 
+  st_transform(cCRS)
+Region <- c(xmin = 18, xmax = 130, ymin = -39, ymax = 34) # Indian Ocean limits
+Bndry <- fSpatPlan_Get_Boundary(Region, cCRS) # boundary
+
+PU_size <- 1000 # in km2, but check resolution for this project?
+Shape <- "Hexagon" # shape of PUs
+MinDepth <- 0
+MaxDepth <- 200 # but check for deep-sea?
+PUs <- fSpatPlan_Get_PlanningUnits(Bndry, world, PU_size, Shape)
+
+```
+
+Boundary
+```{r PR, echo=FALSE}
+ggplot(data = Bndry) + geom_sf()
+```
+
+Planning Units
+```{r PUs, echo=FALSE}
+(ggPU <- fSpatPlan_PlotPUs(PUs, world)) # Plot Planning Units
+```
+
+
+## Conservation features & targets
+
+Composed of 
+
++ Important Bird Areas
++ Important Marine Mammal Areas
++ EBSAs
++ Deepsea features: vents, seamounts, ridges, plateaus? *(need to define)*
+
+### Important Bird Areas
+
+Conservation targets to be defined *need to write chunck to get ConsFeatures$amount*
+
+```{r IBAs, echo = FALSE, results = "hide", message = FALSE, warning = FALSE}
+
+#loading file 
+IBA <- "~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Biodiv_features/IBAs/MarineIBA_IndianOcean.shp"
+
+#crossing shp & PUs
+PUxIBA <- fSpatPlan_Get_Polyg(IBA, PUs)  
+PUs <- PUs %>% 
+  mutate(IBA = PUxIBA) #add column to PU table with
+```
+
+### Important Marine Mammal Areas
+
+Conservation targets to be defined *need to write chunck to get ConsFeatures$amount*
+
+```{r IMMAs, echo = FALSE, results = "hide", message = FALSE, warning = FALSE}
+
+#loading file
+IMMA <- "~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Biodiv_features/IMMAs/iucn-imma.shp"
+
+#crossing shp & PUs
+PUxIMMA <- fSpatPlan_Get_Polyg(IMMA, PUs)  
+PUs <- PUs %>% 
+  mutate(IMMA = PUxIMMA)
+```
+
+### Ecologically and Biologically Significant Areas
+
+Chosen to be:
+
++ within ABNJs (at least partially)
++ not redundant with IMMAs or IBAs
+
+Targets: *need to write chunck to get ConsFeatures$amount*
+
++ NEIO_09 : 10-30%
++ NWIO_14 : 10-30%
++ SIO_11 : 10-30%
++ SIO_19 : >70%
++ SIO_22 : >70%
++ SIO_23 : >70%
++ SIO_30 : >70%
++ SIO_32 : >70%
++ SIO_35 : >70%
++ SIO_36 : >70%
++ SIO_37 : >70%
+
+```{r EBSAs, echo = FALSE, results = "hide", message = FALSE, warning = FALSE}
+
+NEIO_09<- "~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Biodiv_features/EBSAs/NEIO_9_EBSA/NEIO_9_EBSA.shp"
+PUxNEIO_09 <- fSpatPlan_Get_Polyg(NEIO_09, PUs)  
+PUs <- PUs %>% 
+  mutate(NEIO_09 = PUxNEIO_09)
+
+NWIO_14 <- "~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Biodiv_features/EBSAs/NWIO_14_EBSA/NWIO_14_EBSA.shp"
+PUxNWIO_14 <- fSpatPlan_Get_Polyg(NWIO_14, PUs)  
+PUs <- PUs %>% 
+  mutate(NWIO_14 = PUxNWIO_14)
+
+SIO_11 <- "~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Biodiv_features/EBSAs/SIO_11_EBSA-GIS shapefile/SIO_11_EBSA.shp"
+PUxSIO_11 <- fSpatPlan_Get_Polyg(SIO_11, PUs)  
+PUs <- PUs %>% 
+  mutate(SIO_11 = PUxSIO_11)
+
+SIO_19 <- "~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Biodiv_features/EBSAs/SIO_19_EBSA-GIS%20shapefile/SIO_19_EBSA.shp"
+PUxSIO_19 <- fSpatPlan_Get_Polyg(SIO_19, PUs)  
+PUs <- PUs %>% 
+  mutate(SIO_19 = PUxSIO_19)
+
+SIO_22 <- "~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Biodiv_features/EBSAs/SIO_22_EBSA-GIS shapefile/SIO_22_EBSA.shp"
+PUxSIO_22 <- fSpatPlan_Get_Polyg(SIO_22, PUs)  
+PUs <- PUs %>% 
+  mutate(SIO_22 = PUxSIO_22)
+
+SIO_23 <- "~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Biodiv_features/EBSAs/SIO_23_EBSA-GIS shapefile/SIO_23_EBSA.shp"
+PUxSIO_23 <- fSpatPlan_Get_Polyg(SIO_23, PUs)  
+PUs <- PUs %>% 
+  mutate(SIO_23 = PUxSIO_23)
+
+SIO_30 <- "~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Biodiv_features/EBSAs/SIO_30_EBSA-GIS shapefile/SIO_30_EBSA.shp"
+PUx_SIO30 <- fSpatPlan_Get_Polyg(SIO_30, PUs)  
+PUs <- PUs %>% 
+  mutate(SIO_30 = PUx_SIO30)
+
+SIO_32 <- "~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Biodiv_features/EBSAs/SIO_32/SIO_32_EBSA.shp"
+PUxSIO_32 <- fSpatPlan_Get_Polyg(SIO_32, PUs)  
+PUs <- PUs %>% 
+  mutate(SIO_32 = PUxSIO_32)
+
+SIO_35<- "~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Biodiv_features/EBSAs/SIO_35_EBSA-GIS shapefile/SIO_35_EBSA.shp"
+PUxSIO_35 <- fSpatPlan_Get_Polyg(SIO_35, PUs)  
+PUs <- PUs %>% 
+  mutate(SIO_35 = PUxSIO_35)
+
+SIO_36 <- "~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Biodiv_features/EBSAs/SIO_36_EBSA-GIS shapefile/SIO_36_EBSA.shp"
+PUxSIO_36 <- fSpatPlan_Get_Polyg(SIO_36, PUs)  
+PUs <- PUs %>% 
+  mutate(SIO_36 = PUxSIO_36)
+
+SIO_37  <- "~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Biodiv_features/EBSAs/SIO_37_EBSA-GIS shapefile/SIO_37_EBSA.shp"
+PUx_SIO37 <- fSpatPlan_Get_Polyg(SIO_37 , PUs)  
+PUs <- PUs %>% 
+  mutate(SIO_37 = PUx_SIO37)
+```
+
+### Deep-sea features
+
+**Still unable to add legend in plots so showing the code instead, but will ask on Slack**
+
+Seamounts, ridges, plateaus, vents
+
++ *need to add chunck for ridges & plateaus if we decide to add them*
+
++ *need to check how to 'filter' out inactive vents and to cross vents (point data) with PUs and how to add in plot*
+
+Targets: tbd
+
+Vents: >90%
+
+Seamounts: >70%
+
+Ridges/Plateaus: >30%
+
+
+```{r Deep-sea features, echo = FALSE, results = "hide", message = FALSE, warning = FALSE}
+Seamounts <- "~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Biodiv_features/BlueHabs/Seamounts.shp"
+PUxSeamounts <- fSpatPlan_Get_Polyg(Seamounts, PUs)  
+PUs <- PUs %>% 
+  mutate(Seamounts = PUxSeamounts)
+
+Vents <- read.csv("~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Biodiv_features/vents.csv")
+VentsActive <- filter(Vents, Activity == "active, confirmed" | Activity == "active, inferred")
+PUxVents <- fSpatPlan_Get_Polyg(VentsActive, PUs)
+
+```
+
+
+```{r Conservation features, echo = FALSE, message = FALSE, warning = FALSE}
+world <- ne_countries(scale = "medium", returnclass = "sf")
+IndianO <- c(xmin = 17.47941, ymin = -38.7402, xmax = 129.552, ymax = 33.82872)
+
+IMMA <- st_read ("~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Biodiv_features/IMMAs/iucn-imma.shp")
+IBA <- st_read ("~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Biodiv_features/IBAs/MarineIBA_IndianOcean.shp")
+NEIO_09<- st_read ("~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Biodiv_features/EBSAs/NEIO_9_EBSA/NEIO_9_EBSA.shp")
+NWIO_14 <- st_read ("~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Biodiv_features/EBSAs/NWIO_14_EBSA/NWIO_14_EBSA.shp")
+SIO_11 <- st_read ("~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Biodiv_features/EBSAs/SIO_11_EBSA-GIS shapefile/SIO_11_EBSA.shp")
+SIO_19 <- st_read ("~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Biodiv_features/EBSAs/SIO_19_EBSA-GIS%20shapefile/SIO_19_EBSA.shp")
+SIO_22 <- st_read ("~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Biodiv_features/EBSAs/SIO_22_EBSA-GIS shapefile/SIO_22_EBSA.shp")
+SIO_23 <- st_read ("~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Biodiv_features/EBSAs/SIO_23_EBSA-GIS shapefile/SIO_23_EBSA.shp")
+SIO_30 <- st_read  ("~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Biodiv_features/EBSAs/SIO_30_EBSA-GIS shapefile/SIO_30_EBSA.shp")
+SIO_32 <- st_read  ("~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Biodiv_features/EBSAs/SIO_32/SIO_32_EBSA.shp")
+SIO_35<- st_read ("~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Biodiv_features/EBSAs/SIO_35_EBSA-GIS shapefile/SIO_35_EBSA.shp")
+SIO_36 <- st_read ("~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Biodiv_features/EBSAs/SIO_36_EBSA-GIS shapefile/SIO_36_EBSA.shp")
+SIO_37  <-st_read ("~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Biodiv_features/EBSAs/SIO_37_EBSA-GIS shapefile/SIO_37_EBSA.shp")
+Seamounts <- st_read ("~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Biodiv_features/BlueHabs/Seamounts.shp")
+```
+
+```{r Conservation features plot, echo = TRUE, message = FALSE, warning = FALSE}
+
+ggplot() + 
+  geom_sf(data = world) +
+  geom_sf(data = IBA, size = 1, color = "green", fill = "green") + 
+  geom_sf(data = IMMA, size = 1, color = "blue", fill = "blue")+ 
+  geom_sf(data = NEIO_09, size = 1, color = "grey", fill = "grey")+ 
+  geom_sf(data = NWIO_14, size = 1, color = "grey", fill = "grey")+
+  geom_sf(data = SIO_11, size = 1, color = "grey", fill = "grey")+
+  geom_sf(data = SIO_19, size = 1, color = "grey", fill = "grey")+
+  geom_sf(data = SIO_22, size = 1, color = "grey", fill = "grey")+
+  geom_sf(data = SIO_23, size = 1, color = "grey", fill = "grey")+
+  geom_sf(data = SIO_30, size = 1, color = "grey", fill = "grey")+
+  geom_sf(data = SIO_32, size = 1, color = "grey", fill = "grey")+
+  geom_sf(data = SIO_35, size = 1, color = "grey", fill = "grey")+
+  geom_sf(data = SIO_36, size = 1, color = "grey", fill = "grey")+
+  geom_sf(data = SIO_37, size = 1, color = "grey", fill = "grey")+
+  geom_sf(data = Seamounts, size = 1, color = "black", fill = "black")+
+  ggtitle("IBA, IMMA, EBSAs, Seamounts") + 
+  coord_sf(xlim = c(IndianO[["xmin"]], IndianO[["xmax"]]), ylim = c(IndianO[["ymin"]], IndianO[["ymax"]]), expand = FALSE)
+```
+
+## Cost layer
+
+Composed of 
+
++ PMN and CFC areas (Sharma, 2011 for USD valuation)
++ Exploration & reserved areas of deep-sea mining (BUT these should be locked out rather than given a cost value)
++ Fishing effort (monetary value/index? using ready-made cost layer in Spatial Planning repo?)
++ Shipping routes (lock out? or use value of cell in Halpern et al., 2013 dataset?)
+
+Need to define how to combine these costs into 1 layer. Mult-C Sync software (Moffett et al., 2005  / Cameron et al., 2008)? 
+
+Or: running multiple prioritization problems and defining **no-regret** MPAs across stakeholders. 
+
+*Update* possibly able to have USD value for fishing & PMN (see PMN subset)
+
+### CFC
+
+Cobalt-rich Ferromanganese Crusts. Still researching how to value.
+
+```{r CFC, echo = FALSE, results = "hide", message = FALSE, warning = FALSE}
+CFC <- "~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Costs/Mining_resources/Crust/Crust_areas_Hein2013.shp" 
+PUxCFC <- fSpatPlan_Get_Polyg(CFC, PUs)  # function returns out as a logical vector
+PUs <- PUs %>% 
+  mutate(CFC = PUxCFC) # Add logical vector to variable called Mine1)Polyg1
+```
+
+### PMN
+
+Areas rich in PolyMetallic Nodules. **Monetary value** could be assigned using:
+
++ density: 5.6kg/sqm in Indian Ocean basin (Sharma, 2011) - an approximation but better than nothing?
+[link](https://www.resolve.ngo/docs/mar_technol_soc_j_45_28a.pdf)
++ value: 320-1,100USD/tonne of nodules (CRU Consulting, 2019) [link](https://isa.org.jm/files/files/documents/CRU_ISA%20Polymetallic%20nodule%20valuation%20report_24Aug2020.pdf)
++ size of PMN area: #of PUs that intersect with PMN layer * PU size (1000sqkm)
++ extraction rate: 1.5Mt/yr for 20 yrs (Sharma, 2011) (but using this brings even greater uncertainty, I think)
+
+```{r PMN, echo = TRUE,  results = "hide", message = FALSE, warning = FALSE}
+PMN <- "~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Costs/Mining_resources/Nodules/Nodules_Hein2013.shp"
+PUxPMN <- fSpatPlan_Get_Polyg(PMN, PUs)  
+PUs <- PUs %>% 
+  mutate(PMN = PUxPMN)
+```
+
+### Exploration areas 
+
+We need to **lock out** those areas, as mining companies have invested heavily into exploration and will not agree to lose access.
+
+```{r expl, echo = FALSE, results = "hide", message = FALSE, warning = FALSE}
+ExplPMN <- "~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Costs/Mining_contractors/ContractorAreas/01_pmn_exploration_areas.shp"
+PUxExplPMN <- fSpatPlan_Get_Polyg(ExplPMN, PUs)  
+PUs <- PUs %>% 
+  mutate(ExplPMN = PUxExplPMN)
+
+ExplPMS <- "~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Costs/Mining_contractors/ContractorAreas/02_pms_exploration_areas.shp"
+PUxExplPMS <- fSpatPlan_Get_Polyg(ExplPMS, PUs)  
+PUs <- PUs %>% 
+  mutate(ExplPMS = PUxExplPMS)
+
+ExplCFC <- "~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Costs/Mining_contractors/ContractorAreas/03_cfc_exploration_areas.shp"
+PUxExplCFC <- fSpatPlan_Get_Polyg(ExplCFC, PUs)  
+PUs <- PUs %>% 
+  mutate(ExplCFC = PUxExplCFC)
+```
+
+### Reserved areas 
+
+Areas reserved for mining exploitation by developing countries - can also be locked out (same reasoning as above).
+
+```{r res, echo = FALSE, results = "hide", message = FALSE, warning = FALSE}
+ResPMN <- "~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Costs/Mining_contractors/ContractorAreas/04_pmn_reserved_areas.shp"
+PUxResPMN <- fSpatPlan_Get_Polyg(ResPMN, PUs)  
+PUs <- PUs %>% 
+  mutate(ResPMN = PUxResPMN)
+
+ResCFC <- "~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Costs/Mining_contractors/ContractorAreas/05_cfc_reserved_areas.shp"
+PUxResCFC <- fSpatPlan_Get_Polyg(ResCFC, PUs)  
+PUs <- PUs %>% 
+  mutate(ResCFC = PUxResCFC)
+```
+
+Mining layer
+
+*Still unable to add legend so showing the code, will ask on Slack*
+
+```{r Mining layer, echo = FALSE, message = FALSE, warning = FALSE, results = "hide"}
+world <- ne_countries(scale = "medium", returnclass = "sf")
+IndianO <- c(xmin = 17.47941, ymin = -38.7402, xmax = 129.552, ymax = 33.82872)
+CFC <- st_read("~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Costs/Mining_resources/Crust/Crust_areas_Hein2013.shp")
+PMN <- st_read ("~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Costs/Mining_resources/Nodules/Nodules_Hein2013.shp")
+Expl_PMN <- st_read ("~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Costs/Mining_contractors/ContractorAreas/01_pmn_exploration_areas.shp")
+Expl_PMS <- st_read ("~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Costs/Mining_contractors/ContractorAreas/02_pms_exploration_areas.shp")
+Expl_CFC <- st_read ("~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Costs/Mining_contractors/ContractorAreas/03_cfc_exploration_areas.shp")
+Res_PMN <- st_read ("~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Costs/Mining_contractors/ContractorAreas/04_pmn_reserved_areas.shp")
+Res_CFC <- st_read ("~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Costs/Mining_contractors/ContractorAreas/05_cfc_reserved_areas.shp")
+```
+
+```{r Mining layer plot, echo = TRUE, message = FALSE, warning = FALSE}
+ggplot() + 
+  geom_sf(data = world) +
+  geom_sf(data = CFC, size = 1, color = "orange", fill = "orange") + 
+  geom_sf(data = PMN, size = 1, color = "brown", fill = "brown") + 
+  geom_sf(data = Expl_PMN, size = 1, color = "red", fill = "red") + 
+  geom_sf(data = Expl_PMS, size = 1, color = "red", fill = "red") +
+  geom_sf(data = Expl_CFC, size = 1, color = "red", fill = "red") +
+  geom_sf(data = Res_PMN, size = 1, color = "red", fill = "red") +
+  geom_sf(data = Res_CFC, size = 1, color = "red", fill = "red") +
+  ggtitle("PMN, CFC, Exploration & Reserved areas") + 
+  coord_sf(xlim = c(IndianO[["xmin"]], IndianO[["xmax"]]), ylim = c(IndianO[["ymin"]], IndianO[["ymax"]]), expand = FALSE)
+
+```
+
+## Shipping
+
+**! cannot convert to polygon data when using code below (not written as code to avoid issues when knitting doc), error message says file too heavy** *will ask on Slack*
+
+```
+
+ShippingCost <- terra::rast("~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Costs/Shipping/shipping.tif") %>% 
+    terra::as.polygons(trunc = FALSE, dissolve = FALSE, na.rm=FALSE) %>% # Convert to polygon data
+    st_as_sf() %>% # Convert to sf
+    st_transform(cCRS) %>% # Transform to projection
+    st_interpolate_aw(PUs, extensive = FALSE) %>% ## intersect with PUs
+    rename(ShippingCost = layer)
+```
+
+```{r Shipping plot, echo = TRUE}
+Shipping <- terra::rast("~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Costs/Shipping/shipping.tif")
+plot(Shipping, main = 'Shipping routes')
+```
+
+## Fishing
+
+```
+
+Fishing <- fSpatPlan_Get_Cost(PUs, cCRS) ## if issues, try fx below
+
+FishingCost <- terra::rast("~/Documents/MscThesis/GitHub/SpatialPlanning/Data/Cost/Cost_Raster_Sum.grd") %>% 
+    terra::as.polygons(trunc = FALSE, dissolve = FALSE, na.rm=FALSE) %>% # Convert to polygon data
+    st_as_sf() %>% # Convert to sf
+    st_transform(cCRS) %>% # Transform to robinson
+    st_interpolate_aw(PUs, extensive = FALSE) %>% ## intersect with PUs
+    rename(FishingCost = layer)
+
+```
+*Issues with plotting, should be a raster with colours based on cell USD value?*
+
+```{r Fishing plot, echo = TRUE, message = FALSE, warnings = FALSE}
+FishCost <- terra::rast("~/Documents/MscThesis/GitHub/SpatialPlanning/Data/Cost/Cost_Raster_Sum.grd")
+
+plot(FishCost, main = 'Fishing cost')
+```
+
+# Prioritizr problems
+
+## Basic run (Cons features)
+
+*Assumes targets (ConsFeatures$amount) are set, code based on Alvise's work, not as code here to avoid issues when knitting*
+
+```
+p_ConsFeat <- problem(PUs, features = ConsFeatures, cost_column = "NoCost") %>% 
+  add_min_set_objective() %>%
+  add_relative_targets(ConsFeatures$amount) %>% # representation targets (Area)
+  add_binary_decisions() %>%
+  add_lpsymphony_solver(verbose = FALSE) #%>%
+
+````
+
+### Cons features, fishing
+
+*Assumes targets (ConsFeatures$amount) are set, code based on Alvise's work, not as code here to avoid issues when knitting*
+
+```
+p_ConsFeat_Fishing <- problem(PUs, features = ConsFeatures, cost_column = "Fishing") %>% 
+  add_min_set_objective() %>% 
+  add_relative_targets(ConsFeatures$amount) %>% # representation targets (Area)
+  add_binary_decisions() %>%
+  add_lpsymphony_solver(verbose = FALSE) #%>%
+```
+
+### Cons features, mining
+
+*Assumes targets (ConsFeatures$amount) are set, code based on Alvise's work, not as code here to avoid issues when knitting*
+
+*PMNCost will probably be created based on Sharma (2011) & CRU Consulting (2019)?*
+
+```
+
+p_ConsFeat_Mining <- problem(PUs, features = ConsFeatures, cost_column = "PMNCost") %>% 
+  add_min_set_objective() %>% 
+  add_relative_targets(ConsFeatures$amount) %>% # representation targets (Area)
+  add_binary_decisions() %>%
+  add_lpsymphony_solver(verbose = FALSE) #%>%
+  add_locked_out_constraints("Expl_CFC", "Expl_PMN", "Expl_PMS", "Res_PMN", "Res_CFC")
+```
+
+### Cons features, mining + fishing
+
+*Assumes targets (ConsFeatures$amount) are set, code based on Alvise's work, not as code here to avoid issues when knitting*
+
+```
+
+p_ConsFeat_MiningFishing <- problem(PUs, features = ConsFeatures, cost_column = "MiningFishing") %>% 
+  add_min_set_objective() %>% 
+  add_relative_targets(ConsFeatures$amount) %>% # representation targets (Area)
+  add_binary_decisions() %>%
+  add_lpsymphony_solver(verbose = FALSE) #%>%
+  add_locked_out_constraints("Expl_CFC", "Expl_PMN", "Expl_PMS", "Res_PMN", "Res_CFC")
+```
+
+### Cons features, shipping
+
+
+*Same as p_ConsFeat_MiningFishing but with shipping routes locked out as well* 
+
+*Not sure what kind of data transformation is needed to have a file with present/absent shipping routes* 
+
+*Or we can try estimating cost of shipping (question at start of .rmd) and combining with other costs into 1 layer*
+
+```
+
+p_ConsFeat_Shipping <- problem(PUs, features = ConsFeatures, cost_column = "MiningFishing") %>% 
+  add_min_set_objective() %>% 
+  add_relative_targets(ConsFeatures$amount) %>% # representation targets (Area)
+  add_binary_decisions() %>%
+  add_lpsymphony_solver(verbose = FALSE) #%>%
+  add_locked_out_constraints("Shipping","Expl_CFC", "Expl_PMN", "Expl_PMS", "Res_PMN", "Res_CFC")
+```
+
+# Discussion
+
+## Potential improvements
+
+# Conclusion
