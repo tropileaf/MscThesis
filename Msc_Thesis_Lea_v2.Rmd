@@ -40,6 +40,8 @@ pre { /* Code block - determines code spacing between lines */
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+---
+
 # Table of Contents
 # Introduction
 # Materials & Methods
@@ -72,11 +74,15 @@ knitr::opts_chunk$set(echo = TRUE)
 
 Current questions:
 
-+ how to group all files (ex: all EBSAs + IBAs + IMMAs + vents + seamounts...) into one, to create ConsFeatures?
-+ should we use Sharma (2011) + CRU Consulting (2019) to assign USD values to PMN areas? see PMN subsection
-+ shipping raster (Halpern et al., 2013) is too heavy to be converted to polygon, what coupd be other methods (not using as.polygon)?
-+ shipping raster : cells have certain values (# of ships recorded??I will check for Tuesday), could allow to infer USD value of route (# of ships * approx cost of fuel for average cargo to go through 1 PU, which is 1000sqkm)? So we wouldn't try to compute the cost of deviating from any given route, but rather compute the price for each ship to go through 1 PU * the number of ships going through that PU. It sounds fairly logical to me, but maybe it's not?
-+ fishing cost layer : there is a ready-made fx in SpatPlan repo (thanks Jase & Tin), should we use it for this project? see fishing subsection (but issues with plotting  as you can see)
++ how to group all files (ex: all EBSAs + IBAs + IMMAs + vents + seamounts...) into one, to create ConsFeatures? Or is it enough to have columns next to PUs? RESOLVED: yes, stacking = creating columns next to PUs.
++ should we use Sharma (2011) + CRU Consulting (2019) to assign USD values to PMN areas? see PMN subsection. RESOLVED, yes, can use for this project (need to cross-check if want to publish)
++ shipping raster (Halpern et al., 2013) is too heavy to be converted to polygon, what could be other methods (not using as.polygon)? RESAMPLE if resolution to fine
++ shipping raster : cells have certain values (# of ships recorded??I can't figure from the attached files, metadata is confusing), could allow to infer USD value of route (# of ships * approx cost of fuel for average cargo to go through 1 PU, which is 1000sqkm)? So we wouldn't try to compute the cost of deviating from any given route, but rather compute the price for each ship to go through 1 PU * the number of ships going through that PU. It sounds fairly logical to me, but maybe it's not? RESOLVED: check 2008 metada, run prio problem with only shipping
++ fishing cost layer : there is a ready-made fx in SpatPlan repo (thanks Jase & Tin), should we use it for this project? see fishing subsection (but issues with plotting  as you can see). RESOLVED: yes, use fx from Jase & Tin. Change scale to remove outliers/crop to planning region.
++ I'm using echo = FALSE, message = FALSE, warning = FALSE, results = "hide" and still can't get rid of some coding output in the .html :( 
++ I st_to_sf the vents from .csv with PUs' crs but have some issues intersecting the points with polygs, will look more into it. ASK ON SLACK
+
+--- 
 
 # Introduction
 
@@ -85,6 +91,7 @@ This project aims to identify areas for MPAs that maximise the conservation of b
 Why ABNJs?
 
 + to reach the global target of 30% marine protection, ABNJs are optimal (largest area; common good: higher incentive to protect since lower opportunity cost for individual countries)
++ but maybe we can also include non ABNJ? (because shipping data more interesting in EEZs, tbd later)
 
 Why the Indian Ocean?
 
@@ -105,8 +112,7 @@ Why considering multiple stakeholders?
 + deep-sea mining has not yet been considered in MPA design by prioritization, despite major foreseen impacts on marine biodiversity
 + shipping routes (cargo, tankers, tourism) also disturb marine fauna, especially charismatic megafauna
 
-```{r, cache = FALSE, echo = FALSE, results = "hide", message = FALSE}
-#Open all the packages and get extras
+```{r, echo = FALSE, results = "hide", message = FALSE}
 options(repos = list(CRAN="http://cran.rstudio.com/")) 
 library(tidyverse)
 library(sf)
@@ -151,11 +157,10 @@ Inputs needed:
 
 ## Layers overview
 
-still need to 
++ **using the fishing cost layer  already created in Spatial Planning repo**
++ deep-sea features = seamounts, plateaus, vents
 
-+ **select specific fishing rasters (bycatch/demersal...)/ use the fishing cost layer  already created in Spatial Planning repo**
-+ and **select specific benthic shps (seamounts, ridges, plateaus, vents?)**
-+ **need to create subset without inactive vents** *filter fx not working because object=character, will ask on Slack*
+still need to intersect vent points with PUs
 
 blue habitats **do not include hydro vents**, so will use Beaulieu & Szanfranski (2020) [link](https://doi.pangaea.de/10.1594/PANGAEA.917894?format=html#download)
 
@@ -165,7 +170,7 @@ Input type   |  Topic                 | Reference/source (format)
  COST        |  Expl + Res (mining)   |  ISA (shp)
  COST        |  PMN & CFC (mining)    |  Petersen et al., 2016 (shp)
  COST        |  Shipping              |  Halpern et al., 2013 (tif)
- COST        |  Fishing               |  Halpern et al., 2013 (tif)
+ COST        |  Fishing               |  Jase & Tin
  CONS        |  IBAs                  |  Birdlife datazone (shp)
  CONS        |  IMMAs                 |  importantmarinemammalhabitat (shp)
  CONS        |  EBSAs                 |  CBD (shp)
@@ -191,11 +196,6 @@ PUs <- fSpatPlan_Get_PlanningUnits(Bndry, world, PU_size, Shape)
 
 ```
 
-Boundary
-```{r PR, echo=FALSE}
-ggplot(data = Bndry) + geom_sf()
-```
-
 Planning Units
 ```{r PUs, echo=FALSE}
 (ggPU <- fSpatPlan_PlotPUs(PUs, world)) # Plot Planning Units
@@ -209,7 +209,7 @@ Composed of
 + Important Bird Areas
 + Important Marine Mammal Areas
 + EBSAs
-+ Deepsea features: vents, seamounts, ridges, plateaus? *(need to define)*
++ Deepsea features: active vents, seamounts, plateaus?
 
 ### Important Bird Areas
 
@@ -322,13 +322,9 @@ PUs <- PUs %>%
 
 ### Deep-sea features
 
-**Still unable to add legend in plots so showing the code instead, but will ask on Slack**
+Seamounts,plateaus, vents
 
-Seamounts, ridges, plateaus, vents
-
-+ *need to add chunck for ridges & plateaus if we decide to add them*
-
-+ *need to check how to 'filter' out inactive vents and to cross vents (point data) with PUs and how to add in plot*
+*need to cross vents with PUs*
 
 Targets: tbd
 
@@ -336,7 +332,7 @@ Vents: >90%
 
 Seamounts: >70%
 
-Ridges/Plateaus: >30%
+Plateaus: >30%
 
 
 ```{r Deep-sea features, echo = FALSE, results = "hide", message = FALSE, warning = FALSE}
@@ -345,12 +341,19 @@ PUxSeamounts <- fSpatPlan_Get_Polyg(Seamounts, PUs)
 PUs <- PUs %>% 
   mutate(Seamounts = PUxSeamounts)
 
+Plateaus <- "~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Biodiv_features/BlueHabs/Plateaus.shp"
+PUxPlateaus <- fSpatPlan_Get_Polyg(Plateaus, PUs)  
+PUs <- PUs %>% 
+  mutate(Plateaus = PUxPlateaus)
+
 Vents <- read.csv("~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Biodiv_features/vents.csv")
 VentsActive <- filter(Vents, Activity == "active, confirmed" | Activity == "active, inferred")
-PUxVents <- fSpatPlan_Get_Polyg(VentsActive, PUs)
-
+VentsActiveSF<- st_as_sf(VentsActive, coords = c("Latitude", "Longitude"), crs = st_crs(PUs))
+PUxVents <- st_intersects(PUs, VentsActiveSF) %>% 
+    as.logical() 
+PUs <- PUs %>% 
+  mutate(Vents = PUxVents) ##issue: NAs everywhere, probably because trying to cross points with polygs?
 ```
-
 
 ```{r Conservation features, echo = FALSE, message = FALSE, warning = FALSE}
 world <- ne_countries(scale = "medium", returnclass = "sf")
@@ -370,30 +373,38 @@ SIO_35<- st_read ("~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Biodiv_featu
 SIO_36 <- st_read ("~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Biodiv_features/EBSAs/SIO_36_EBSA-GIS shapefile/SIO_36_EBSA.shp")
 SIO_37  <-st_read ("~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Biodiv_features/EBSAs/SIO_37_EBSA-GIS shapefile/SIO_37_EBSA.shp")
 Seamounts <- st_read ("~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Biodiv_features/BlueHabs/Seamounts.shp")
+Plateaus <- st_read ("~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Biodiv_features/BlueHabs/Plateaus.shp")
 ```
 
-```{r Conservation features plot, echo = TRUE, message = FALSE, warning = FALSE}
+Conservation features
+
+```{r Conservation features plot, echo = FALSE, message = FALSE, warning = FALSE}
 
 ggplot() + 
   geom_sf(data = world) +
-  geom_sf(data = IBA, size = 1, color = "green", fill = "green") + 
-  geom_sf(data = IMMA, size = 1, color = "blue", fill = "blue")+ 
-  geom_sf(data = NEIO_09, size = 1, color = "grey", fill = "grey")+ 
-  geom_sf(data = NWIO_14, size = 1, color = "grey", fill = "grey")+
-  geom_sf(data = SIO_11, size = 1, color = "grey", fill = "grey")+
-  geom_sf(data = SIO_19, size = 1, color = "grey", fill = "grey")+
-  geom_sf(data = SIO_22, size = 1, color = "grey", fill = "grey")+
-  geom_sf(data = SIO_23, size = 1, color = "grey", fill = "grey")+
-  geom_sf(data = SIO_30, size = 1, color = "grey", fill = "grey")+
-  geom_sf(data = SIO_32, size = 1, color = "grey", fill = "grey")+
-  geom_sf(data = SIO_35, size = 1, color = "grey", fill = "grey")+
-  geom_sf(data = SIO_36, size = 1, color = "grey", fill = "grey")+
-  geom_sf(data = SIO_37, size = 1, color = "grey", fill = "grey")+
-  geom_sf(data = Seamounts, size = 1, color = "black", fill = "black")+
-  ggtitle("IBA, IMMA, EBSAs, Seamounts") + 
-  coord_sf(xlim = c(IndianO[["xmin"]], IndianO[["xmax"]]), ylim = c(IndianO[["ymin"]], IndianO[["ymax"]]), expand = FALSE)
-```
+  geom_sf(data = NEIO_09,  aes(color="A"), show.legend = "line")+ 
+  geom_sf(data = NWIO_14,  aes(color="A"), show.legend = "line")+
+  geom_sf(data = SIO_11,  aes(color="A"), show.legend = "line")+
+  geom_sf(data = SIO_19,  aes(color="A"), show.legend = "line")+
+  geom_sf(data = SIO_22,  aes(color="A"), show.legend = "line")+
+  geom_sf(data = SIO_23,  aes(color="A"), show.legend = "line")+
+  geom_sf(data = SIO_30,  aes(color="A"), show.legend = "line")+
+  geom_sf(data = SIO_32,  aes(color="A"), show.legend = "line")+
+  geom_sf(data = SIO_35,  aes(color="A"), show.legend = "line")+
+  geom_sf(data = SIO_36, aes(color="A"), show.legend = "line")+
+  geom_sf(data = SIO_37,  aes(color="A"), show.legend = "line")+
+  geom_sf(data = Seamounts,  aes(color="B"), show.legend = "line")+
+  geom_sf(data = Plateaus,  aes(color="C"), show.legend = "line")+
+  geom_sf(data = IBA,  aes(color="D"), show.legend = "line") + 
+  geom_sf(data = IMMA,  aes(color="E"), show.legend = "line")+ 
+  geom_sf(data = VentsActiveSF,  aes(color="F"), show.legend = "line")+ 
+  ggtitle("IBA, IMMA, EBSAs, Seamounts, Plateaus, Vents")+ 
+  coord_sf(xlim = c(IndianO[["xmin"]], IndianO[["xmax"]]), ylim = c(IndianO[["ymin"]], IndianO[["ymax"]]), expand = FALSE) +
+  scale_color_manual(values = c("A" = "grey", "B" = "black", "C" = "purple", "D" = "green", "E" = "blue", "F" = "red"), 
+                     labels = c("EBSAs", "Seamounts", "Plateaus", "IBAs", "IMMAs", "Active vents"),
+                     name = "Legend") 
 
+```
 ## Cost layer
 
 Composed of 
@@ -476,8 +487,6 @@ PUs <- PUs %>%
 
 Mining layer
 
-*Still unable to add legend so showing the code, will ask on Slack*
-
 ```{r Mining layer, echo = FALSE, message = FALSE, warning = FALSE, results = "hide"}
 world <- ne_countries(scale = "medium", returnclass = "sf")
 IndianO <- c(xmin = 17.47941, ymin = -38.7402, xmax = 129.552, ymax = 33.82872)
@@ -490,21 +499,26 @@ Res_PMN <- st_read ("~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Costs/Mini
 Res_CFC <- st_read ("~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Costs/Mining_contractors/ContractorAreas/05_cfc_reserved_areas.shp")
 ```
 
-```{r Mining layer plot, echo = TRUE, message = FALSE, warning = FALSE}
+
+Mining areas
+
+```{r Mining layer plot, echo = FALSE, message = FALSE, warning = FALSE}
 ggplot() + 
   geom_sf(data = world) +
-  geom_sf(data = CFC, size = 1, color = "orange", fill = "orange") + 
-  geom_sf(data = PMN, size = 1, color = "brown", fill = "brown") + 
-  geom_sf(data = Expl_PMN, size = 1, color = "red", fill = "red") + 
-  geom_sf(data = Expl_PMS, size = 1, color = "red", fill = "red") +
-  geom_sf(data = Expl_CFC, size = 1, color = "red", fill = "red") +
-  geom_sf(data = Res_PMN, size = 1, color = "red", fill = "red") +
-  geom_sf(data = Res_CFC, size = 1, color = "red", fill = "red") +
+  geom_sf(data = CFC, aes(color="A"), show.legend = "line") + 
+  geom_sf(data = PMN, aes(color="B"), show.legend = "line") + 
+  geom_sf(data = Expl_PMN, aes(color="C"), show.legend = "line") + 
+  geom_sf(data = Expl_PMS, aes(color="C"), show.legend = "line") +
+  geom_sf(data = Expl_CFC, aes(color="C"), show.legend = "line") +
+  geom_sf(data = Res_PMN, aes(color="D"), show.legend = "line") +
+  geom_sf(data = Res_CFC, aes(color="D"), show.legend = "line") +
+  scale_color_manual(values = c("A" = "orange", "B" = "brown", "C" = "red", "D" = "red"), 
+                     labels = c("CFC", "PMN", "Exploration areas", "Reserved areas"),
+                     name = "Legend") +
   ggtitle("PMN, CFC, Exploration & Reserved areas") + 
   coord_sf(xlim = c(IndianO[["xmin"]], IndianO[["xmax"]]), ylim = c(IndianO[["ymin"]], IndianO[["ymax"]]), expand = FALSE)
 
 ```
-
 ## Shipping
 
 **! cannot convert to polygon data when using code below (not written as code to avoid issues when knitting doc), error message says file too heavy** *will ask on Slack*
