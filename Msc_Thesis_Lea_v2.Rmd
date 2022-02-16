@@ -82,7 +82,7 @@ Current questions:
 + I'm using echo = FALSE, message = FALSE, warning = FALSE, results = "hide" and still can't get rid of some coding output in the .html :( 
 + I st_to_sf the vents from .csv with PUs' crs but have some issues intersecting the points with polygs, will look more into it. ASK ON SLACK
 
---- 
+---
 
 # Introduction
 
@@ -113,6 +113,7 @@ Why considering multiple stakeholders?
 + shipping routes (cargo, tankers, tourism) also disturb marine fauna, especially charismatic megafauna
 
 ```{r, echo = FALSE, results = "hide", message = FALSE}
+#Open all the packages and get extras
 options(repos = list(CRAN="http://cran.rstudio.com/")) 
 library(tidyverse)
 library(sf)
@@ -170,7 +171,7 @@ Input type   |  Topic                 | Reference/source (format)
  COST        |  Expl + Res (mining)   |  ISA (shp)
  COST        |  PMN & CFC (mining)    |  Petersen et al., 2016 (shp)
  COST        |  Shipping              |  Halpern et al., 2013 (tif)
- COST        |  Fishing               |  Jase & Tin
+ COST        |  Fishing               |  Cost layer created by Jase
  CONS        |  IBAs                  |  Birdlife datazone (shp)
  CONS        |  IMMAs                 |  importantmarinemammalhabitat (shp)
  CONS        |  EBSAs                 |  CBD (shp)
@@ -201,7 +202,6 @@ Planning Units
 (ggPU <- fSpatPlan_PlotPUs(PUs, world)) # Plot Planning Units
 ```
 
-
 ## Conservation features & targets
 
 Composed of 
@@ -209,7 +209,7 @@ Composed of
 + Important Bird Areas
 + Important Marine Mammal Areas
 + EBSAs
-+ Deepsea features: active vents, seamounts, plateaus?
++ Deepsea features: active vents, seamounts, rift_valleys, plateaus? *(need to define)*
 
 ### Important Bird Areas
 
@@ -228,7 +228,7 @@ PUs <- PUs %>%
 
 ### Important Marine Mammal Areas
 
-Conservation targets to be defined *need to write chunck to get ConsFeatures$amount*
+Conservation targets to be defined *need to write chunck*
 
 ```{r IMMAs, echo = FALSE, results = "hide", message = FALSE, warning = FALSE}
 
@@ -248,7 +248,7 @@ Chosen to be:
 + within ABNJs (at least partially)
 + not redundant with IMMAs or IBAs
 
-Targets: *need to write chunck to get ConsFeatures$amount*
+Targets: *need to write chunck*
 
 + NEIO_09 : 10-30%
 + NWIO_14 : 10-30%
@@ -322,17 +322,16 @@ PUs <- PUs %>%
 
 ### Deep-sea features
 
-Seamounts,plateaus, vents
-
-*need to cross vents with PUs*
+Seamounts, plateaus, active vents
+Need to find out how to cross vents with PUs
 
 Targets: tbd
 
-Vents: >90%
+Vents: >90% [.csv to .shp](https://datacarpentry.org/r-raster-vector-geospatial/10-vector-csv-to-shapefile-in-r/) 
 
-Seamounts: >70%
+Seamounts: >70% (ex: Letessier et al., 2019, PLOS Biology)
 
-Plateaus: >30%
+Ridges/Plateaus: >30%
 
 
 ```{r Deep-sea features, echo = FALSE, results = "hide", message = FALSE, warning = FALSE}
@@ -348,14 +347,17 @@ PUs <- PUs %>%
 
 Vents <- read.csv("~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Biodiv_features/vents.csv")
 VentsActive <- filter(Vents, Activity == "active, confirmed" | Activity == "active, inferred")
-VentsActiveSF<- st_as_sf(VentsActive, coords = c("Latitude", "Longitude"), crs = st_crs(PUs))
+VentsActiveSF<- st_as_sf(VentsActive, coords = c("Latitude", "Longitude"), crs = st_crs(PUs)) # could rewrite section using pipes
+```
+
+```
 PUxVents <- st_intersects(PUs, VentsActiveSF) %>% 
     as.logical() 
 PUs <- PUs %>% 
   mutate(Vents = PUxVents) ##issue: NAs everywhere, probably because trying to cross points with polygs?
 ```
 
-```{r Conservation features, echo = FALSE, message = FALSE, warning = FALSE}
+```{r Conservation features, echo = FALSE, results = "hide", message = FALSE, warning = FALSE}
 world <- ne_countries(scale = "medium", returnclass = "sf")
 IndianO <- c(xmin = 17.47941, ymin = -38.7402, xmax = 129.552, ymax = 33.82872)
 
@@ -405,20 +407,20 @@ ggplot() +
                      name = "Legend") 
 
 ```
+
+
 ## Cost layer
 
 Composed of 
 
 + PMN and CFC areas (Sharma, 2011 for USD valuation)
-+ Exploration & reserved areas of deep-sea mining (BUT these should be locked out rather than given a cost value)
-+ Fishing effort (monetary value/index? using ready-made cost layer in Spatial Planning repo?)
-+ Shipping routes (lock out? or use value of cell in Halpern et al., 2013 dataset?)
++ Exploration & reserved areas of deep-sea mining (lock out because won't agree to lose investments)
++ Fishing effort (using ready-made cost layer in Spatial Planning repo)
++ Shipping routes (use value of cell in Halpern et al., 2013 dataset for relative cost)
 
 Need to define how to combine these costs into 1 layer. Mult-C Sync software (Moffett et al., 2005  / Cameron et al., 2008)? 
 
 Or: running multiple prioritization problems and defining **no-regret** MPAs across stakeholders. 
-
-*Update* possibly able to have USD value for fishing & PMN (see PMN subset)
 
 ### CFC
 
@@ -428,7 +430,7 @@ Cobalt-rich Ferromanganese Crusts. Still researching how to value.
 CFC <- "~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Costs/Mining_resources/Crust/Crust_areas_Hein2013.shp" 
 PUxCFC <- fSpatPlan_Get_Polyg(CFC, PUs)  # function returns out as a logical vector
 PUs <- PUs %>% 
-  mutate(CFC = PUxCFC) # Add logical vector to variable called Mine1)Polyg1
+  mutate(CFC = PUxCFC) # Add logical vector to variable
 ```
 
 ### PMN
@@ -485,8 +487,6 @@ PUs <- PUs %>%
   mutate(ResCFC = PUxResCFC)
 ```
 
-Mining layer
-
 ```{r Mining layer, echo = FALSE, message = FALSE, warning = FALSE, results = "hide"}
 world <- ne_countries(scale = "medium", returnclass = "sf")
 IndianO <- c(xmin = 17.47941, ymin = -38.7402, xmax = 129.552, ymax = 33.82872)
@@ -498,7 +498,6 @@ Expl_CFC <- st_read ("~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Costs/Min
 Res_PMN <- st_read ("~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Costs/Mining_contractors/ContractorAreas/04_pmn_reserved_areas.shp")
 Res_CFC <- st_read ("~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Costs/Mining_contractors/ContractorAreas/05_cfc_reserved_areas.shp")
 ```
-
 
 Mining areas
 
@@ -513,15 +512,23 @@ ggplot() +
   geom_sf(data = Res_PMN, aes(color="D"), show.legend = "line") +
   geom_sf(data = Res_CFC, aes(color="D"), show.legend = "line") +
   scale_color_manual(values = c("A" = "orange", "B" = "brown", "C" = "red", "D" = "red"), 
-                     labels = c("CFC", "PMN", "Exploration areas", "Reserved areas"),
+                     labels = c("CFC", "PMN", "Expl_PMN", "Expl_CFC", "Res_PMN", "Res_CFC"),
                      name = "Legend") +
   ggtitle("PMN, CFC, Exploration & Reserved areas") + 
   coord_sf(xlim = c(IndianO[["xmin"]], IndianO[["xmax"]]), ylim = c(IndianO[["ymin"]], IndianO[["ymax"]]), expand = FALSE)
 
 ```
+
 ## Shipping
 
-**! cannot convert to polygon data when using code below (not written as code to avoid issues when knitting doc), error message says file too heavy** *will ask on Slack*
+**! cannot convert to polygon data when using code below (not written as code to avoid issues when knitting doc), error message says file too heavy** *Need to resample, will ask on Slack*
+
+
+```{r Shipping plot, echo = FALSE}
+Shipping <- terra::rast("~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Costs/Shipping/shipping.tif")
+plot(Shipping, main = 'Shipping routes')
+```
+
 
 ```
 
@@ -533,31 +540,52 @@ ShippingCost <- terra::rast("~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Co
     rename(ShippingCost = layer)
 ```
 
-```{r Shipping plot, echo = TRUE}
-Shipping <- terra::rast("~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Costs/Shipping/shipping.tif")
-plot(Shipping, main = 'Shipping routes')
-```
-
 ## Fishing
 
-```
+Could set cut-off for cost outliers at 15,000 USD or 40,000 USD - depending on whether we want to favour variation or follow standard procedures for cut-off (see histograms and maps).
 
-Fishing <- fSpatPlan_Get_Cost(PUs, cCRS) ## if issues, try fx below
+```{r Fishing cost plot, echo = TRUE, message = FALSE, warnings = FALSE}
 
-FishingCost <- terra::rast("~/Documents/MscThesis/GitHub/SpatialPlanning/Data/Cost/Cost_Raster_Sum.grd") %>% 
+FishingCost <- fSpatPlan_Get_Cost <- function(PUs, cCRS){
+  
+  # TODO Add some filtering ability to get the cost only for specific groups
+  
+  Cost <- terra::rast("Data/Cost/Cost_Raster_Sum.grd") %>% 
     terra::as.polygons(trunc = FALSE, dissolve = FALSE, na.rm=FALSE) %>% # Convert to polygon data
     st_as_sf() %>% # Convert to sf
     st_transform(cCRS) %>% # Transform to robinson
     st_interpolate_aw(PUs, extensive = FALSE) %>% ## intersect with PUs
-    rename(FishingCost = layer)
+    rename(Cost = layer)
+}
 
-```
-*Issues with plotting, should be a raster with colours based on cell USD value?*
+hist(FishingCost$Cost) #max value >200,000
 
-```{r Fishing plot, echo = TRUE, message = FALSE, warnings = FALSE}
-FishCost <- terra::rast("~/Documents/MscThesis/GitHub/SpatialPlanning/Data/Cost/Cost_Raster_Sum.grd")
+ggplot() + 
+  geom_sf(data = world) +
+  geom_sf(data = FishingCost, aes(color=Cost)) +
+ggtitle("Fishing Cost") + 
+  coord_sf(xlim = c(IndianO[["xmin"]], IndianO[["xmax"]]), ylim = c(IndianO[["ymin"]], IndianO[["ymax"]]), expand = FALSE)
 
-plot(FishCost, main = 'Fishing cost')
+FishingCostOutliers <- filter(FishingCost, Cost >= 50000) # check out outliers, play with cut-off value
+
+hist(FishingCostOutliers$Cost)
+
+ggplot() + 
+  geom_sf(data = world) +
+  geom_sf(data = FishingCostOutliers, aes(color=Cost)) +
+ggtitle("Fishing Cost Outliers (>50,000 USD)") + 
+  coord_sf(xlim = c(IndianO[["xmin"]], IndianO[["xmax"]]), ylim = c(IndianO[["ymin"]], IndianO[["ymax"]]), expand = FALSE)
+
+FishingCostNoOutliers <- filter(FishingCost, Cost <= 50000) # remove outliers, play with cut-off value
+
+hist(FishingCostNoOutliers$Cost) # 49256 obs. = 524 outliers removed when cut-off = 20,000) but would also make sense to set cut-off at 15,000 or 40,000...
+
+ggplot() + 
+  geom_sf(data = world) +
+  geom_sf(data = FishingCostNoOutliers, aes(color=Cost)) +
+ggtitle("Fishing Cost Without Outliers") + 
+  coord_sf(xlim = c(IndianO[["xmin"]], IndianO[["xmax"]]), ylim = c(IndianO[["ymin"]], IndianO[["ymax"]]), expand = FALSE)
+  
 ```
 
 # Prioritizr problems
@@ -580,7 +608,7 @@ p_ConsFeat <- problem(PUs, features = ConsFeatures, cost_column = "NoCost") %>%
 *Assumes targets (ConsFeatures$amount) are set, code based on Alvise's work, not as code here to avoid issues when knitting*
 
 ```
-p_ConsFeat_Fishing <- problem(PUs, features = ConsFeatures, cost_column = "Fishing") %>% 
+p_ConsFeat_Fishing <- problem(PUs, features = ConsFeatures, cost_column = "FishingCost") %>% 
   add_min_set_objective() %>% 
   add_relative_targets(ConsFeatures$amount) %>% # representation targets (Area)
   add_binary_decisions() %>%
@@ -592,6 +620,14 @@ p_ConsFeat_Fishing <- problem(PUs, features = ConsFeatures, cost_column = "Fishi
 *Assumes targets (ConsFeatures$amount) are set, code based on Alvise's work, not as code here to avoid issues when knitting*
 
 *PMNCost will probably be created based on Sharma (2011) & CRU Consulting (2019)?*
+
+[prioritizr.net](https://prioritizr.net/reference/add_locked_out_constraints.html) says to use structure below to lock out polygons but need to look more into it
+
+```
+# create problem with added locked out constraints using spatial polygon data
+locked_out <- sim_pu_polygons[sim_pu_polygons$locked_out == 1, ]
+p5 <- p1 %>% add_locked_out_constraints(locked_out)
+```
 
 ```
 
