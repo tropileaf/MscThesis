@@ -72,17 +72,22 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ---
 
-Current questions:
+Resolved questions:
 
 + how to group all files (ex: all EBSAs + IBAs + IMMAs + vents + seamounts...) into one, to create ConsFeatures? Or is it enough to have columns next to PUs? RESOLVED: yes, stacking = creating columns next to PUs.
 + should we use Sharma (2011) + CRU Consulting (2019) to assign USD values to PMN areas? see PMN subsection. RESOLVED, yes, can use for this project (need to cross-check if want to publish)
-+ shipping raster (Halpern et al., 2013) is too heavy to be converted to polygon, what could be other methods (not using as.polygon)? RESAMPLE if resolution to fine
 + shipping raster : cells have certain values (# of ships recorded??I can't figure from the attached files, metadata is confusing), could allow to infer USD value of route (# of ships * approx cost of fuel for average cargo to go through 1 PU, which is 1000sqkm)? So we wouldn't try to compute the cost of deviating from any given route, but rather compute the price for each ship to go through 1 PU * the number of ships going through that PU. It sounds fairly logical to me, but maybe it's not? RESOLVED: check 2008 metada, run prio problem with only shipping
 + fishing cost layer : there is a ready-made fx in SpatPlan repo (thanks Jase & Tin), should we use it for this project? see fishing subsection (but issues with plotting  as you can see). RESOLVED: yes, use fx from Jase & Tin. Change scale to remove outliers/crop to planning region.
-+ I'm using echo = FALSE, message = FALSE, warning = FALSE, results = "hide" and still can't get rid of some coding output in the .html :( 
-+ I st_to_sf the vents from .csv with PUs' crs but have some issues intersecting the points with polygs, will look more into it. ASK ON SLACK
++ I'm using echo = FALSE, message = FALSE, warning = FALSE, results = "hide" and still can't get rid of some coding output in the .html. RESOLVED: cut up chuncks of code with separate ones for plots
++ I st_to_sf the vents from .csv with PUs' crs but have some issues intersecting the points with polygs, will look more into it. RESOLVED: use st_contains after crs = 4326 & st_transform(cCRS)
 
 ---
+
+Current questions:
+
++ shipping raster (Halpern et al., 2013) is too heavy to be converted to polygon, what could be other methods (not using as.polygon)? RESAMPLE if resolution <1°. NEED TO FIND RESOLUTION of raster
+
+--- 
 
 # Introduction
 
@@ -170,7 +175,7 @@ Input type   |  Topic                 | Reference/source (format)
 :-----------:|:----------------------:|:----------------------------------:
  COST        |  Expl + Res (mining)   |  ISA (shp)
  COST        |  PMN & CFC (mining)    |  Petersen et al., 2016 (shp)
- COST        |  Shipping              |  Halpern et al., 2013 (tif)
+ COST        |  Shipping              |  Halpern et al., 2015 (tif from 2013)
  COST        |  Fishing               |  Cost layer created by Jase
  CONS        |  IBAs                  |  Birdlife datazone (shp)
  CONS        |  IMMAs                 |  importantmarinemammalhabitat (shp)
@@ -327,7 +332,7 @@ Need to find out how to cross vents with PUs
 
 Targets: tbd
 
-Vents: >90% [.csv to .shp](https://datacarpentry.org/r-raster-vector-geospatial/10-vector-csv-to-shapefile-in-r/) 
+Vents: >90% [.csv to .shp](https://datacarpentry.org/r-raster-vector-geospatial/10-vector-csv-to-shapefile-in-r/) [dataset  datum](https://vents-data.interridge.org/sites/vents-data.interridge.org/files/InterRidge_Vents_Database_Version3.1_documentation.pdf)
 
 Seamounts: >70% (ex: Letessier et al., 2019, PLOS Biology)
 
@@ -346,20 +351,39 @@ PUs <- PUs %>%
   mutate(Plateaus = PUxPlateaus)
 
 Vents <- read.csv("~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Biodiv_features/vents.csv")
-VentsActive <- filter(Vents, Activity == "active, confirmed" | Activity == "active, inferred")
-VentsActiveSF<- st_as_sf(VentsActive, coords = c("Latitude", "Longitude"), crs = st_crs(PUs)) # could rewrite section using pipes
-```
+VentsActive <- filter(Vents, Activity == "active, confirmed" | Activity == "active, inferred") 
+VentsActiveSF <- st_as_sf(VentsActive, coords = c(x = "Longitude", y = "Latitude"), crs = 4326) %>% 
+  st_transform(cCRS)
 
-```
-PUxVents <- st_intersects(PUs, VentsActiveSF) %>% 
-    as.logical() 
+PUxVents <- st_contains(PUs,VentsActiveSF, sparse = FALSE) %>%
+  rowSums() %>% 
+  as.logical()
 PUs <- PUs %>% 
-  mutate(Vents = PUxVents) ##issue: NAs everywhere, probably because trying to cross points with polygs?
+  mutate(Vents = PUxVents)
+
 ```
 
-```{r Conservation features, echo = FALSE, results = "hide", message = FALSE, warning = FALSE}
+```{r vents plot, echo = FALSE, message = FALSE, warning = FALSE}
 world <- ne_countries(scale = "medium", returnclass = "sf")
 IndianO <- c(xmin = 17.47941, ymin = -38.7402, xmax = 129.552, ymax = 33.82872)
+
+ggplot() + 
+  geom_sf(data = world) + 
+  geom_sf(data = VentsActiveSF) +
+  ggtitle("Active vents after st_tranform(cCRS)") +
+  coord_sf(xlim = c(IndianO[["xmin"]], IndianO[["xmax"]]), ylim = c(IndianO[["ymin"]], IndianO[["ymax"]]), expand = FALSE) 
+
+#PUxVents <- st_join(PUs, VentsActiveSF, join = st_within) #no longer needed
+#VentsActiveSFClean <- dplyr::select(VentsActiveSF, Name.ID, geometry)
+#VentsActiveSFCleanBuff <- st_buffer(VentsActiveSFClean, dist = 1000)
+#PUxVents <- st_intersects(VentsActiveSF, PUs)
+#PUs <- PUs %>% 
+#  mutate(Vents = PUxVents)
+  
+```
+
+
+```{r Conservation features, echo = FALSE, results = "hide", message = FALSE, warning = FALSE}
 
 IMMA <- st_read ("~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Biodiv_features/IMMAs/iucn-imma.shp")
 IBA <- st_read ("~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Biodiv_features/IBAs/MarineIBA_IndianOcean.shp")
@@ -399,9 +423,9 @@ ggplot() +
   geom_sf(data = Plateaus,  aes(color="C"), show.legend = "line")+
   geom_sf(data = IBA,  aes(color="D"), show.legend = "line") + 
   geom_sf(data = IMMA,  aes(color="E"), show.legend = "line")+ 
-  geom_sf(data = VentsActiveSF,  aes(color="F"), show.legend = "line")+ 
+  geom_sf(data = VentsActiveSF,  aes(color="F"), show.legend = "line")+
   ggtitle("IBA, IMMA, EBSAs, Seamounts, Plateaus, Vents")+ 
-  coord_sf(xlim = c(IndianO[["xmin"]], IndianO[["xmax"]]), ylim = c(IndianO[["ymin"]], IndianO[["ymax"]]), expand = FALSE) +
+  coord_sf(xlim = c(IndianO[["xmin"]], IndianO[["xmax"]]), ylim = c(IndianO[["ymin"]], IndianO[["ymax"]]), expand = FALSE)+
   scale_color_manual(values = c("A" = "grey", "B" = "black", "C" = "purple", "D" = "green", "E" = "blue", "F" = "red"), 
                      labels = c("EBSAs", "Seamounts", "Plateaus", "IBAs", "IMMAs", "Active vents"),
                      name = "Legend") 
@@ -544,29 +568,39 @@ ShippingCost <- terra::rast("~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Co
 
 Could set cut-off for cost outliers at 15,000 USD or 40,000 USD - depending on whether we want to favour variation or follow standard procedures for cut-off (see histograms and maps).
 
-```{r Fishing cost plot, echo = TRUE, message = FALSE, warnings = FALSE}
 
-FishingCost <- fSpatPlan_Get_Cost <- function(PUs, cCRS){
+```{r Fishing cost, echo = TRUE, warning = FALSE}
+
+#adding modified fx here to ensure it uses the right path
+
+fSpatPlan_Get_Cost <- function(PUs, cCRS){
   
   # TODO Add some filtering ability to get the cost only for specific groups
   
-  Cost <- terra::rast("Data/Cost/Cost_Raster_Sum.grd") %>% 
+  FishingCost <- terra::rast("Data/Cost/Cost_Raster_Sum.grd") %>% 
     terra::as.polygons(trunc = FALSE, dissolve = FALSE, na.rm=FALSE) %>% # Convert to polygon data
     st_as_sf() %>% # Convert to sf
     st_transform(cCRS) %>% # Transform to robinson
     st_interpolate_aw(PUs, extensive = FALSE) %>% ## intersect with PUs
-    rename(Cost = layer)
+    rename(FishingCost = layer)
 }
 
-hist(FishingCost$Cost) #max value >200,000
+FishingCost <- fSpatPlan_Get_Cost(PUs, cCRS)
+
+hist(FishingCost$FishingCost) #max value >200,000
+FishingCostPlusOne <- FishingCost$FishingCost + 1
+hist(log(FishingCostPlusOne)) #drop after log=10, exp(10)=22026.465794807
 
 ggplot() + 
   geom_sf(data = world) +
-  geom_sf(data = FishingCost, aes(color=Cost)) +
-ggtitle("Fishing Cost") + 
+  geom_sf(data = FishingCost, aes(color=FishingCost)) +
+ggtitle("Fishing Cost All Values") + 
   coord_sf(xlim = c(IndianO[["xmin"]], IndianO[["xmax"]]), ylim = c(IndianO[["ymin"]], IndianO[["ymax"]]), expand = FALSE)
 
-FishingCostOutliers <- filter(FishingCost, Cost >= 50000) # check out outliers, play with cut-off value
+```
+
+```
+FishingCostOutliers <- filter(FishingCost, Cost >= 22000) # check outliers
 
 hist(FishingCostOutliers$Cost)
 
@@ -576,9 +610,9 @@ ggplot() +
 ggtitle("Fishing Cost Outliers (>50,000 USD)") + 
   coord_sf(xlim = c(IndianO[["xmin"]], IndianO[["xmax"]]), ylim = c(IndianO[["ymin"]], IndianO[["ymax"]]), expand = FALSE)
 
-FishingCostNoOutliers <- filter(FishingCost, Cost <= 50000) # remove outliers, play with cut-off value
+FishingCostNoOutliers <- filter(FishingCost, Cost <= 22000) # remove outliers
 
-hist(FishingCostNoOutliers$Cost) # 49256 obs. = 524 outliers removed when cut-off = 20,000) but would also make sense to set cut-off at 15,000 or 40,000...
+hist(FishingCostNoOutliers$Cost) #(49256 obs. = 524 outliers removed when #cut-off = 20,000)
 
 ggplot() + 
   geom_sf(data = world) +
