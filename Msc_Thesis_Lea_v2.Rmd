@@ -1,7 +1,7 @@
 ---
 title: "Cross-sectoral conservation of the Indian Ocean"
 author: "Lea Fourchault"
-date: "02/02/2022"
+date: "22/02/2022"
 output: html_document
 ---
 <style type="text/css">
@@ -53,6 +53,7 @@ knitr::opts_chunk$set(echo = TRUE)
 ### IMMAs
 ### EBSAs
 ### Deep-sea features : seamounts, ridges, plateaus, vents 
+### Targets dataframe
 ## Cost layer
 ### CFC
 ### PMN
@@ -76,22 +77,57 @@ Resolved questions:
 
 + how to group all files (ex: all EBSAs + IBAs + IMMAs + vents + seamounts...) into one, to create ConsFeatures? Or is it enough to have columns next to PUs? RESOLVED: yes, stacking = creating columns next to PUs.
 + should we use Sharma (2011) + CRU Consulting (2019) to assign USD values to PMN areas? see PMN subsection. RESOLVED, yes, can use for this project (need to cross-check if want to publish)
-+ shipping raster : cells have certain values (# of ships recorded??I can't figure from the attached files, metadata is confusing), could allow to infer USD value of route (# of ships * approx cost of fuel for average cargo to go through 1 PU, which is 1000sqkm)? So we wouldn't try to compute the cost of deviating from any given route, but rather compute the price for each ship to go through 1 PU * the number of ships going through that PU. It sounds fairly logical to me, but maybe it's not? RESOLVED: check 2008 metada, run prio problem with only shipping
++ shipping raster : cells have certain values (# of ships recorded?? I can't figure from the attached files, metadata is confusing), could allow to infer USD value of route (# of ships * approx cost of fuel for average cargo to go through 1 PU, which is 1000sqkm)? So we wouldn't try to compute the cost of deviating from any given route, but rather compute the price for each ship to go through 1 PU * the number of ships going through that PU. It sounds fairly logical to me, but maybe it's not? RESOLVED: check 2008 metada, run prio problem with only shipping
 + fishing cost layer : there is a ready-made fx in SpatPlan repo (thanks Jase & Tin), should we use it for this project? see fishing subsection (but issues with plotting  as you can see). RESOLVED: yes, use fx from Jase & Tin. Change scale to remove outliers/crop to planning region.
 + I'm using echo = FALSE, message = FALSE, warning = FALSE, results = "hide" and still can't get rid of some coding output in the .html. RESOLVED: cut up chuncks of code with separate ones for plots
 + I st_to_sf the vents from .csv with PUs' crs but have some issues intersecting the points with polygs, will look more into it. RESOLVED: use st_contains after crs = 4326 & st_transform(cCRS)
++ add list of species as cons_feats: EN, VU etc (Ant's email to mining colleague)? RESOLVED: fine-tune later
++ shipping raster (Halpern et al., 2013) is too heavy to be converted to polygon, what could be other methods (not using as.polygon)? RESAMPLE if resolution <1°. Resolution = 934m*934m (! 1° at equator = 111km = 60 nm; [convert](https://www.johndcook.com/how_big_is_a_degree.html); resolution too fine so need resampling). RESOLVED: no resampling, overlay raster with PUs (exactextractr) to attribute mean raster cells value to PUs (no weighted mean because raster cells are all equal-area because Mollweide proj)
++ how to remove EEZs from PUs? RESOLVED: find EEZ shp and spatial predicates, inverse overlay with Bndry, recreate PUs
++ setting  targets. RESOLVED: 30% for rpz area, 70% for important/rare feature; create dataframe with 1 column: features, 1 column: targets (match order)
 
 ---
 
-Current questions:
+Current questions & issues:
 
-+ shipping raster (Halpern et al., 2013) is too heavy to be converted to polygon, what could be other methods (not using as.polygon)? RESAMPLE if resolution <1°. NEED TO FIND RESOLUTION of raster
++ ongoing - pricing deep-sea mineral resources (I am looking for more papers especially regarding CFC)
++ check research questions
++ overlay shipping & PUs + plot with log10?
++ cross inactive vents & PUs - done
++ how to assign price to mining shps
++ assigning targets - write chunk
 
 --- 
 
+Parameters we agree on for first prioritizr run
+
++ PUs = ABNJ only
++ cons feats = IMMAs, IBAs, chosen EBSAs, vents (active + inactive), seamounts, plateaus; no aquamaps
++ mining cost = value/t * density * area, discount rate and other improvements to be determined later (if any), USD
++ fishing cost = removed fish mass * fish value (layer created by Jase), USD
++ shipping cost = mean of shipping raster cells' values for each PU, not USD (intensity)
++ targets = 30% for rpz area, 70% for important
+
+---
+
+
 # Introduction
 
-This project aims to identify areas for MPAs that maximise the conservation of biologically and ecologically important areas in the Indian Ocean's ABNJS, across all depths, while minimizing conflict with local industrial stakeholders - including the fishing, shipping, and deep-sea mining industries. 
+*This project aims to identify areas for MPAs that maximise the conservation of biologically and ecologically important areas in the Indian Ocean's ABNJS, across all depths, while minimizing conflict with local industrial stakeholders - including the fishing, shipping, and deep-sea mining industries.*
+
+**Possible research questions**
+
+Ranked from most general to most precise, can be same question with different wording (some are in passive form, I know it's better to use active but some sound weird when saying 'we'?)
+
+1. how can marine spatial planning adapt to a time of increased anthropogenic pressures?
+2. how can the interests of multiple industrial stakeholders be incorporated into MPA design?
+3. how can value be estimated in the context of data-poor industries?
+4. which areas are most valuable to industrial stakeholders in the Indian Ocean?
+5. how can we design MPAs that minimize trade-offs with industrial stakeholders in the Indian Ocean?
+6. how can we design MPAs that maximize biodiversity conservation across depth layers in the Indian Ocean?
+7. how can we quantify/estimate trade-offs amongst industries in the Indian Ocean?
+8. how can we quantify/estimate trade-offs between industries and conservation in the Indian Ocean? and,
+9. how can such trade-offs with industrial stakeholders be minimized when designing MPAs?
 
 Why ABNJs?
 
@@ -163,11 +199,6 @@ Inputs needed:
 
 ## Layers overview
 
-+ **using the fishing cost layer  already created in Spatial Planning repo**
-+ deep-sea features = seamounts, plateaus, vents
-
-still need to intersect vent points with PUs
-
 blue habitats **do not include hydro vents**, so will use Beaulieu & Szanfranski (2020) [link](https://doi.pangaea.de/10.1594/PANGAEA.917894?format=html#download)
 
 
@@ -182,9 +213,12 @@ Input type   |  Topic                 | Reference/source (format)
  CONS        |  EBSAs                 |  CBD (shp)
  CONS        |  Benthic features      |  Blue Habitats (shp)
  CONS        |  Longhurst provinces ? |  Marine Regions (shp)
- CONS        |  Vents                 |  Beaulieu & Szanfranski (2020) (csv)
-
+ CONS        |  Active vents          |  Beaulieu & Szanfranski (2020) (csv)
+ CONS        |  Inactive vents        |  Beaulieu & Szanfranski (2020) (csv)
+ 
 ## Planning region 
+
+*substract EEZs shp from boundary, then recreate PUs*
 
 ```{r Planning Region, echo = TRUE, message = FALSE, results = "hide", warning = FALSE}
 
@@ -214,11 +248,11 @@ Composed of
 + Important Bird Areas
 + Important Marine Mammal Areas
 + EBSAs
-+ Deepsea features: active vents, seamounts, rift_valleys, plateaus? *(need to define)*
++ Deepsea features: active + inactive vents, seamounts, plateaus
 
 ### Important Bird Areas
 
-Conservation targets to be defined *need to write chunck to get ConsFeatures$amount*
+Conservation targets = 30%
 
 ```{r IBAs, echo = FALSE, results = "hide", message = FALSE, warning = FALSE}
 
@@ -233,7 +267,7 @@ PUs <- PUs %>%
 
 ### Important Marine Mammal Areas
 
-Conservation targets to be defined *need to write chunck*
+Conservation targets = 30%
 
 ```{r IMMAs, echo = FALSE, results = "hide", message = FALSE, warning = FALSE}
 
@@ -255,17 +289,17 @@ Chosen to be:
 
 Targets: *need to write chunck*
 
-+ NEIO_09 : 10-30%
-+ NWIO_14 : 10-30%
-+ SIO_11 : 10-30%
-+ SIO_19 : >70%
-+ SIO_22 : >70%
-+ SIO_23 : >70%
-+ SIO_30 : >70%
-+ SIO_32 : >70%
-+ SIO_35 : >70%
-+ SIO_36 : >70%
-+ SIO_37 : >70%
++ NEIO_09 : 30%
++ NWIO_14 : 30%
++ SIO_11 :  30%
++ SIO_19 :  70%
++ SIO_22 :  70%
++ SIO_23 :  70%
++ SIO_30 :  70%
++ SIO_32 :  70%
++ SIO_35 :  70%
++ SIO_36 :  70%
++ SIO_37 :  70%
 
 ```{r EBSAs, echo = FALSE, results = "hide", message = FALSE, warning = FALSE}
 
@@ -327,16 +361,11 @@ PUs <- PUs %>%
 
 ### Deep-sea features
 
-Seamounts, plateaus, active vents
-Need to find out how to cross vents with PUs
+Seamounts, plateaus, inactive + active vents
 
-Targets: tbd
-
-Vents: >90% [.csv to .shp](https://datacarpentry.org/r-raster-vector-geospatial/10-vector-csv-to-shapefile-in-r/) [dataset  datum](https://vents-data.interridge.org/sites/vents-data.interridge.org/files/InterRidge_Vents_Database_Version3.1_documentation.pdf)
-
-Seamounts: >70% (ex: Letessier et al., 2019, PLOS Biology)
-
-Ridges/Plateaus: >30%
++ Active + inactive vents: 70% [.csv to .shp](https://datacarpentry.org/r-raster-vector-geospatial/10-vector-csv-to-shapefile-in-r/) [dataset  datum](https://vents-data.interridge.org/sites/vents-data.interridge.org/files/InterRidge_Vents_Database_Version3.1_documentation.pdf)
++ Seamounts: 30% (but some advocate for more: Letessier et al., 2019, PLOS Biology)
++ Plateaus: >30%
 
 
 ```{r Deep-sea features, echo = FALSE, results = "hide", message = FALSE, warning = FALSE}
@@ -355,11 +384,21 @@ VentsActive <- filter(Vents, Activity == "active, confirmed" | Activity == "acti
 VentsActiveSF <- st_as_sf(VentsActive, coords = c(x = "Longitude", y = "Latitude"), crs = 4326) %>% 
   st_transform(cCRS)
 
-PUxVents <- st_contains(PUs,VentsActiveSF, sparse = FALSE) %>%
+PUxVentsActive <- st_contains(PUs,VentsActiveSF, sparse = FALSE) %>%
   rowSums() %>% 
   as.logical()
 PUs <- PUs %>% 
-  mutate(Vents = PUxVents)
+  mutate(Active_Vents = PUxVentsActive)
+
+VentsInactive <- filter(Vents, Activity == "inactive")
+VentsInactiveSF <- st_as_sf(VentsActive, coords = c(x = "Longitude", y = "Latitude"), crs = 4326) %>% 
+  st_transform(cCRS)
+
+PUxVentsInactive <- st_contains(PUs,VentsInactiveSF, sparse = FALSE) %>%
+  rowSums() %>% 
+  as.logical()
+PUs <- PUs %>% 
+  mutate(Inactive_Vents = PUxVentsInactive)
 
 ```
 
@@ -424,13 +463,16 @@ ggplot() +
   geom_sf(data = IBA,  aes(color="D"), show.legend = "line") + 
   geom_sf(data = IMMA,  aes(color="E"), show.legend = "line")+ 
   geom_sf(data = VentsActiveSF,  aes(color="F"), show.legend = "line")+
+  geom_sf(data = VentsInactiveSF,  aes(color="G"), show.legend = "line")+
   ggtitle("IBA, IMMA, EBSAs, Seamounts, Plateaus, Vents")+ 
   coord_sf(xlim = c(IndianO[["xmin"]], IndianO[["xmax"]]), ylim = c(IndianO[["ymin"]], IndianO[["ymax"]]), expand = FALSE)+
-  scale_color_manual(values = c("A" = "grey", "B" = "black", "C" = "purple", "D" = "green", "E" = "blue", "F" = "red"), 
-                     labels = c("EBSAs", "Seamounts", "Plateaus", "IBAs", "IMMAs", "Active vents"),
+  scale_color_manual(values = c("A" = "grey", "B" = "black", "C" = "blue", "D" = "green", "E" = "purple", "F" = "red", "G" = "brown"), 
+                     labels = c("EBSAs", "Seamounts", "Plateaus", "IBAs", "IMMAs", "Active vents", "Inactive Vents"),
                      name = "Legend") 
 
 ```
+### Targets dataframe
+
 
 
 ## Cost layer
@@ -440,7 +482,7 @@ Composed of
 + PMN and CFC areas (Sharma, 2011 for USD valuation)
 + Exploration & reserved areas of deep-sea mining (lock out because won't agree to lose investments)
 + Fishing effort (using ready-made cost layer in Spatial Planning repo)
-+ Shipping routes (use value of cell in Halpern et al., 2013 dataset for relative cost)
++ Shipping routes (use value of cell in Halpern et al. (2015), 2013 dataset for relative cost)
 
 Need to define how to combine these costs into 1 layer. Mult-C Sync software (Moffett et al., 2005  / Cameron et al., 2008)? 
 
@@ -531,12 +573,12 @@ ggplot() +
   geom_sf(data = CFC, aes(color="A"), show.legend = "line") + 
   geom_sf(data = PMN, aes(color="B"), show.legend = "line") + 
   geom_sf(data = Expl_PMN, aes(color="C"), show.legend = "line") + 
-  geom_sf(data = Expl_PMS, aes(color="C"), show.legend = "line") +
-  geom_sf(data = Expl_CFC, aes(color="C"), show.legend = "line") +
-  geom_sf(data = Res_PMN, aes(color="D"), show.legend = "line") +
-  geom_sf(data = Res_CFC, aes(color="D"), show.legend = "line") +
-  scale_color_manual(values = c("A" = "orange", "B" = "brown", "C" = "red", "D" = "red"), 
-                     labels = c("CFC", "PMN", "Expl_PMN", "Expl_CFC", "Res_PMN", "Res_CFC"),
+  geom_sf(data = Expl_PMS, aes(color="D"), show.legend = "line") +
+ # geom_sf(data = Expl_CFC, aes(color="E"), show.legend = "line") +
+  geom_sf(data = Res_PMN, aes(color="F"), show.legend = "line") +
+ # geom_sf(data = Res_CFC, aes(color="G"), show.legend = "line") +
+  scale_color_manual(values = c("A" = "grey", "B" = "brown", "C" = "orange", "D" = "red", "F" = "yellow"), 
+                     labels = c("CFC", "PMN", "Expl_PMN", "Expl_PMS", "Res_PMN"),
                      name = "Legend") +
   ggtitle("PMN, CFC, Exploration & Reserved areas") + 
   coord_sf(xlim = c(IndianO[["xmin"]], IndianO[["xmax"]]), ylim = c(IndianO[["ymin"]], IndianO[["ymax"]]), expand = FALSE)
@@ -545,12 +587,15 @@ ggplot() +
 
 ## Shipping
 
-**! cannot convert to polygon data when using code below (not written as code to avoid issues when knitting doc), error message says file too heavy** *Need to resample, will ask on Slack*
+Overlay shipping raster with polygons to get average intensity of shipping for 1 PU.
 
 
 ```{r Shipping plot, echo = FALSE}
 Shipping <- terra::rast("~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Costs/Shipping/shipping.tif")
 plot(Shipping, main = 'Shipping routes')
+
+#ShippingRobin <- terra::
+#exactextractr::exact_extract(Shipping, PUs, mean)
 ```
 
 
@@ -566,7 +611,7 @@ ShippingCost <- terra::rast("~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Co
 
 ## Fishing
 
-Could set cut-off for cost outliers at 15,000 USD or 40,000 USD - depending on whether we want to favour variation or follow standard procedures for cut-off (see histograms and maps).
+Could set cut-off for cost outliers at 15,000 USD or 40,000 USD or no cut off - depending on whether we want to favour variation or follow standard procedures for outliers (see histograms and maps).
 
 
 ```{r Fishing cost, echo = TRUE, warning = FALSE}
@@ -589,7 +634,7 @@ FishingCost <- fSpatPlan_Get_Cost(PUs, cCRS)
 
 hist(FishingCost$FishingCost) #max value >200,000
 FishingCostPlusOne <- FishingCost$FishingCost + 1
-hist(log(FishingCostPlusOne)) #drop after log=10, exp(10)=22026.465794807
+hist(log10(FishingCostPlusOne)) #drop after log10(x)=4, x=10^4=10,000?
 
 ggplot() + 
   geom_sf(data = world) +
