@@ -365,7 +365,7 @@ Seamounts, plateaus, inactive + active vents
 
 + Active + inactive vents: 70% [.csv to .shp](https://datacarpentry.org/r-raster-vector-geospatial/10-vector-csv-to-shapefile-in-r/) [dataset  datum](https://vents-data.interridge.org/sites/vents-data.interridge.org/files/InterRidge_Vents_Database_Version3.1_documentation.pdf)
 + Seamounts: 30% (but some advocate for more: Letessier et al., 2019, PLOS Biology)
-+ Plateaus: >30%
++ Plateaus: 30%
 
 
 ```{r Deep-sea features, echo = FALSE, results = "hide", message = FALSE, warning = FALSE}
@@ -473,7 +473,7 @@ ggplot() +
 ```
 ### Targets dataframe
 
-
+Cons_feats <- tibble(Features = c("IBA", "IMMA", "NEIO_09", "NWIO_14", "SIO_11", "SIO_19", "SIO_22", "SIO_23", "SIO_30", "SIO_32", "SIO_35", "SIO_36", "SIO_37","Seamounts", "Plateaus", "Active_Vents", "Inactive_Vents"), Targets = c(0.3, 0.3, 0.3, 0.3, 0.3, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.3, 0.3, 0.7, 0.7))
 
 ## Cost layer
 
@@ -671,12 +671,12 @@ ggtitle("Fishing Cost Without Outliers") +
 
 ## Basic run (Cons features)
 
-*Assumes targets (ConsFeatures$amount) are set, code based on Alvise's work, not as code here to avoid issues when knitting*
+*Code based on Alvise's work, not as code here to avoid issues when knitting*
 
 ```
-p_ConsFeat <- problem(PUs, features = ConsFeatures, cost_column = "NoCost") %>% 
+p_ConsFeats <- problem(PUs, Cons_feats$Features, cost_column = "NoCost") %>%
   add_min_set_objective() %>%
-  add_relative_targets(ConsFeatures$amount) %>% # representation targets (Area)
+  add_relative_targets(Cons_Feats$Targets) %>% #
   add_binary_decisions() %>%
   add_lpsymphony_solver(verbose = FALSE) #%>%
 
