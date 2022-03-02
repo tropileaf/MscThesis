@@ -82,9 +82,10 @@ Resolved questions:
 + I'm using echo = FALSE, message = FALSE, warning = FALSE, results = "hide" and still can't get rid of some coding output in the .html. RESOLVED: cut up chuncks of code with separate ones for plots
 + I st_to_sf the vents from .csv with PUs' crs but have some issues intersecting the points with polygs, will look more into it. RESOLVED: use st_contains after crs = 4326 & st_transform(cCRS)
 + add list of species as cons_feats: EN, VU etc (Ant's email to mining colleague)? RESOLVED: fine-tune later
-+ shipping raster (Halpern et al., 2013) is too heavy to be converted to polygon, what could be other methods (not using as.polygon)? RESAMPLE if resolution <1°. Resolution = 934m*934m (! 1° at equator = 111km = 60 nm; [convert](https://www.johndcook.com/how_big_is_a_degree.html); resolution too fine so need resampling). RESOLVED: no resampling, overlay raster with PUs (exactextractr) to attribute mean raster cells value to PUs (no weighted mean because raster cells are all equal-area because Mollweide proj)
++ shipping raster (Halpern et al., 2015) is too heavy to be converted to polygon, what could be other methods (not using as.polygon)? RESAMPLE if resolution <1°. Resolution = 934m*934m (! 1° at equator = 111km = 60 nm; [convert](https://www.johndcook.com/how_big_is_a_degree.html); resolution too fine so need resampling). RESOLVED: no resampling, overlay raster with PUs (exactextractr) to attribute mean raster cells value to PUs (no weighted mean because raster cells are all equal-area because Mollweide proj)
 + how to remove EEZs from PUs? RESOLVED: find EEZ shp and spatial predicates, inverse overlay with Bndry, recreate PUs
 + setting  targets. RESOLVED: 30% for rpz area, 70% for important/rare feature; create dataframe with 1 column: features, 1 column: targets (match order)
++ cross inactive vents & PUs - done
 
 ---
 
@@ -93,9 +94,8 @@ Current questions & issues:
 + ongoing - pricing deep-sea mineral resources (I am looking for more papers especially regarding CFC)
 + check research questions
 + overlay shipping & PUs + plot with log10?
-+ cross inactive vents & PUs - done
-+ how to assign price to mining shps
-+ assigning targets - write chunk
++ how to assign price to mining shps / create cost layer?
++ assigning targets - Cons_feats tibble created
 
 --- 
 
@@ -222,18 +222,34 @@ Input type   |  Topic                 | Reference/source (format)
 
 ```{r Planning Region, echo = TRUE, message = FALSE, results = "hide", warning = FALSE}
 
+# define region and boundary
+
 cCRS <- "+proj=robin +lon_0=0 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs" # Robinson projection
 world <- ne_countries(scale = "medium", returnclass = "sf") %>% 
   st_transform(cCRS)
 Region <- c(xmin = 18, xmax = 130, ymin = -39, ymax = 34) # Indian Ocean limits
 Bndry <- fSpatPlan_Get_Boundary(Region, cCRS) # boundary
 
+# intersect bndry and high seas
+
+ABNJ <- st_read ("~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/World_High_Seas_v1/High_Seas_v1.shp") 
+ABNJRobin <- st_transform(ABNJ, cCRS) # high seas in robin proj, does not work when using pipe
+ABNJRobBuff  <- st_buffer(ABNJRobin, 0) # need to create buffer of 0 to avoid Error in CPL_geos_op2(op, x, y) : Evaluation error: TopologyException: Input geom 0 is invalid: Self-intersection at or near point -> overwrite offending geometries
+BndryABNJ <- st_intersection(ABNJRobBuff, Bndry)
+
+#create PUs
+
 PU_size <- 1000 # in km2, but check resolution for this project?
 Shape <- "Hexagon" # shape of PUs
 MinDepth <- 0
 MaxDepth <- 200 # but check for deep-sea?
-PUs <- fSpatPlan_Get_PlanningUnits(Bndry, world, PU_size, Shape)
+PUs <- fSpatPlan_Get_PlanningUnits(BndryABNJ, world, PU_size, Shape) 
 
+### method with EEZ took forever and was not created the PUs I wanted, so I chose to keep high seas shp instead of using EEZ shp
+#EEZ <- st_read ("~/Documents/MscThesis/GitHub/SpatialPlanning/Data/World_EEZ_v11/eez_v11.shp") 
+#EEZRobin <-  st_transform(EEZ, cCRS)
+#BndryABNJ <- st_difference(Bndry, EEZRobin)
+#PUs <- fSpatPlan_Get_PlanningUnits(Bndry, world, PU_size, Shape) # error : st_crs(x) == st_crs(y) is not TRUE ?
 ```
 
 Planning Units
@@ -402,7 +418,7 @@ PUs <- PUs %>%
 
 ```
 
-```{r vents plot, echo = FALSE, message = FALSE, warning = FALSE}
+```{r vents plot, echo = FALSE, message = FALSE, warning = FALSE, results = "hide"}
 world <- ne_countries(scale = "medium", returnclass = "sf")
 IndianO <- c(xmin = 17.47941, ymin = -38.7402, xmax = 129.552, ymax = 33.82872)
 
@@ -473,7 +489,11 @@ ggplot() +
 ```
 ### Targets dataframe
 
+```{r Conservation features and targets, echo = FALSE, message = FALSE, warning = FALSE}
+
 Cons_feats <- tibble(Features = c("IBA", "IMMA", "NEIO_09", "NWIO_14", "SIO_11", "SIO_19", "SIO_22", "SIO_23", "SIO_30", "SIO_32", "SIO_35", "SIO_36", "SIO_37","Seamounts", "Plateaus", "Active_Vents", "Inactive_Vents"), Targets = c(0.3, 0.3, 0.3, 0.3, 0.3, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.3, 0.3, 0.7, 0.7))
+
+```
 
 ## Cost layer
 
@@ -589,17 +609,32 @@ ggplot() +
 
 Overlay shipping raster with polygons to get average intensity of shipping for 1 PU.
 
+```{r Shipping plot, echo = TRUE}
 
-```{r Shipping plot, echo = FALSE}
 Shipping <- terra::rast("~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Costs/Shipping/shipping.tif")
-plot(Shipping, main = 'Shipping routes')
+#View(Shipping)
+#plot(Shipping, main = 'Shipping routes')
+ShippingRobin <- terra::project(Shipping, "ESRI:54030") #transform to robin proj
+#plot(ShippingRobin, main = 'Shipping routes')
+PUxShipping <- exactextractr::exact_extract(ShippingRobin, PUs, "mean") # attribute mean value of pixels in each PU to PU
+PUs <- PUs %>% 
+  mutate(ShippingIntensity = PUxShipping) # add column to PU data frame
 
-#ShippingRobin <- terra::
-#exactextractr::exact_extract(Shipping, PUs, mean)
+#ShippingPlusOne <- Shipping$shipping +1
+#ShippingLog <- log10(ShippingPlusOne)
+#hist(log10(ShippingPlusOne))  #Warning: [hist] a sample of0% of the cells was used (of which 21% was NA); meaning +1 didn't work?
+
+#ShippingRobin <- terra::project(Shipping, "cCRS") #Error: [project] cannot get output boundaries
+
+#ShippingRobin <- project(Shipping, "+proj=robin +lon_0=0 +x_0=0 +y_0=0 #+datum=WGS84 +units=m +no_defs") # no error but does not assign projection
+
+#ShippingRobin <- project(Shipping, "ESRI:54030", method = "near") #transform to robin proj # error about method "near"
+
 ```
 
 
 ```
+# not using this method because file to heavy to use as.polygons
 
 ShippingCost <- terra::rast("~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Costs/Shipping/shipping.tif") %>% 
     terra::as.polygons(trunc = FALSE, dissolve = FALSE, na.rm=FALSE) %>% # Convert to polygon data
@@ -610,9 +645,6 @@ ShippingCost <- terra::rast("~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Co
 ```
 
 ## Fishing
-
-Could set cut-off for cost outliers at 15,000 USD or 40,000 USD or no cut off - depending on whether we want to favour variation or follow standard procedures for outliers (see histograms and maps).
-
 
 ```{r Fishing cost, echo = TRUE, warning = FALSE}
 
@@ -625,16 +657,17 @@ fSpatPlan_Get_Cost <- function(PUs, cCRS){
   FishingCost <- terra::rast("Data/Cost/Cost_Raster_Sum.grd") %>% 
     terra::as.polygons(trunc = FALSE, dissolve = FALSE, na.rm=FALSE) %>% # Convert to polygon data
     st_as_sf() %>% # Convert to sf
-    st_transform(cCRS) %>% # Transform to robinson
+    st_transform(cCRS) %>% # transform to robinson
     st_interpolate_aw(PUs, extensive = FALSE) %>% ## intersect with PUs
     rename(FishingCost = layer)
 }
 
 FishingCost <- fSpatPlan_Get_Cost(PUs, cCRS)
-
-hist(FishingCost$FishingCost) #max value >200,000
-FishingCostPlusOne <- FishingCost$FishingCost + 1
-hist(log10(FishingCostPlusOne)) #drop after log10(x)=4, x=10^4=10,000?
+PUs <- PUs %>% 
+  mutate(Fishing = FishingCost) #issues: no error but cannot check PU dataframe after this: Error in `[.data.frame`(x, i) : undefined columns selected; probably need to restart session
+hist(FishingCost$FishingCost) 
+#FishingCostPlusOne <- FishingCost$FishingCost + 1 #not needed, min >0 for PU=ABNJ
+hist(log10(FishingCost$FishingCost)) #drop after log10(x)=4, x=10^4=10,000? #no longer needed since in ABNJ max val = ##USD 5000, and most values are 10^1 - 10^2 USD
 
 ggplot() + 
   geom_sf(data = world) +
@@ -644,7 +677,10 @@ ggtitle("Fishing Cost All Values") +
 
 ```
 
-```
+``` 
+
+#section not needed anymore since no outliers when PUs=ABNJ
+
 FishingCostOutliers <- filter(FishingCost, Cost >= 22000) # check outliers
 
 hist(FishingCostOutliers$Cost)
@@ -674,47 +710,55 @@ ggtitle("Fishing Cost Without Outliers") +
 *Code based on Alvise's work, not as code here to avoid issues when knitting*
 
 ```
-p_ConsFeats <- problem(PUs, Cons_feats$Features, cost_column = "NoCost") %>%
-  add_min_set_objective() %>%
-  add_relative_targets(Cons_Feats$Targets) %>% #
-  add_binary_decisions() %>%
-  add_lpsymphony_solver(verbose = FALSE) #%>%
 
-````
+p_ConsFeats <- problem(PUs, features = Cons_feats$Features) %>% #issues because no cost_column
+  add_min_set_objective() %>%
+  add_relative_targets(Cons_feats$Targets) %>% 
+  add_binary_decisions() %>%
+  add_lpsymphony_solver(verbose = FALSE) 
+
+```
 
 ### Cons features, fishing
 
-*Assumes targets (ConsFeatures$amount) are set, code based on Alvise's work, not as code here to avoid issues when knitting*
+*code based on Alvise's work, not as code here to avoid issues when knitting*
+
 
 ```
-p_ConsFeat_Fishing <- problem(PUs, features = ConsFeatures, cost_column = "FishingCost") %>% 
+
+p_ConsFeat_Fishing <- problem(PUs, features = Cons_feats$Features, cost_column = PUs$FishingCost) %>% 
   add_min_set_objective() %>% 
-  add_relative_targets(ConsFeatures$amount) %>% # representation targets (Area)
+  add_relative_targets(Cons_feats$Targets) %>% 
   add_binary_decisions() %>%
-  add_lpsymphony_solver(verbose = FALSE) #%>%
+  add_lpsymphony_solver(verbose = FALSE) 
+  
 ```
 
 ### Cons features, mining
 
-*Assumes targets (ConsFeatures$amount) are set, code based on Alvise's work, not as code here to avoid issues when knitting*
+*code based on Alvise's work, not as code here to avoid issues when knitting*
 
 *PMNCost will probably be created based on Sharma (2011) & CRU Consulting (2019)?*
 
 [prioritizr.net](https://prioritizr.net/reference/add_locked_out_constraints.html) says to use structure below to lock out polygons but need to look more into it
 
-```
 # create problem with added locked out constraints using spatial polygon data
+
+```
+use: 
+
 locked_out <- sim_pu_polygons[sim_pu_polygons$locked_out == 1, ]
 p5 <- p1 %>% add_locked_out_constraints(locked_out)
 ```
+or try
 
 ```
 
-p_ConsFeat_Mining <- problem(PUs, features = ConsFeatures, cost_column = "PMNCost") %>% 
+p_ConsFeat_Mining <- problem(PUs, features = Cons_feats$Features, cost_column = PUs$PMNCost) %>% 
   add_min_set_objective() %>% 
-  add_relative_targets(ConsFeatures$amount) %>% # representation targets (Area)
+  add_relative_targets(Cons_feats$Targets) %>% 
   add_binary_decisions() %>%
-  add_lpsymphony_solver(verbose = FALSE) #%>%
+  add_lpsymphony_solver(verbose = FALSE) %>%
   add_locked_out_constraints("Expl_CFC", "Expl_PMN", "Expl_PMS", "Res_PMN", "Res_CFC")
 ```
 
@@ -724,31 +768,30 @@ p_ConsFeat_Mining <- problem(PUs, features = ConsFeatures, cost_column = "PMNCos
 
 ```
 
-p_ConsFeat_MiningFishing <- problem(PUs, features = ConsFeatures, cost_column = "MiningFishing") %>% 
+p_ConsFeat_MiningFishing <- problem(PUs, features = Cons_feats, cost_column = PUs$MiningFishing) %>% 
   add_min_set_objective() %>% 
-  add_relative_targets(ConsFeatures$amount) %>% # representation targets (Area)
+  add_relative_targets(Cons_features$Targets) %>%
   add_binary_decisions() %>%
-  add_lpsymphony_solver(verbose = FALSE) #%>%
+  add_lpsymphony_solver(verbose = FALSE) %>%
   add_locked_out_constraints("Expl_CFC", "Expl_PMN", "Expl_PMS", "Res_PMN", "Res_CFC")
 ```
 
 ### Cons features, shipping
 
-
-*Same as p_ConsFeat_MiningFishing but with shipping routes locked out as well* 
-
 *Not sure what kind of data transformation is needed to have a file with present/absent shipping routes* 
 
 *Or we can try estimating cost of shipping (question at start of .rmd) and combining with other costs into 1 layer*
 
-```
+*here, Shipping = mean values of pixels overlaid on PUs, so intensity of shippings; not USD* 
 
-p_ConsFeat_Shipping <- problem(PUs, features = ConsFeatures, cost_column = "MiningFishing") %>% 
+```{r Shipping problem, echo = TRUE, warning = FALSE}
+
+p_ConsFeat_Shipping <- problem(PUs, features = Cons_feats$Features, cost_column = "PUs$Shipping") %>% 
   add_min_set_objective() %>% 
-  add_relative_targets(ConsFeatures$amount) %>% # representation targets (Area)
+  add_relative_targets(Cons_feats$Targets) %>% 
   add_binary_decisions() %>%
   add_lpsymphony_solver(verbose = FALSE) #%>%
-  add_locked_out_constraints("Shipping","Expl_CFC", "Expl_PMN", "Expl_PMS", "Res_PMN", "Res_CFC")
+  #add_locked_out_constraints("Shipping","Expl_CFC", "Expl_PMN", "Expl_PMS", "Res_PMN", "Res_CFC")
 ```
 
 # Discussion
