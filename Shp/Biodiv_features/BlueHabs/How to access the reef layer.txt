@@ -1,0 +1,11 @@
+----------------------------
+How to access the reef layer
+----------------------------
+
+The reef layer is not distributed in this zip file.
+
+The Reefs data layers were developed by the World Resource Institute as part of the Reefs at Risk Revisited project (2011).
+The reef shapefiles can be downloaded as part of the base data (GIS Data Sets -> Base Data) from the Reefs at Risk page on the World Resource Institute wesite
+
+http://www.wri.org/publication/reefs-risk-revisited
+
