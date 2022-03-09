@@ -253,6 +253,7 @@ nr <- st_nearest_feature(PUs, longhRob)
 PUs <- PUs %>% 
   mutate(ProvCode = longh$ProvCode[nr],
          ProvDescr = longh$ProvDescr[nr])
+PUs$ProvCode
 
 ggplot() + 
   geom_sf(data = world, color = "grey20", fill = "grey20", size = 0.1, show.legend = FALSE) +
@@ -603,3 +604,172 @@ p_check_targets_sol_plot <- ggplot() +
         axis.title.y = element_blank())
 
 p_check_targets_sol_plot
+
+
+#' ## Comparing solutions
+
+# based on Alvise's functions:
+
+fCompareSolutions <- function(ctrl, rmv){
+  
+  #Select only the ID column and the solution column; change the name of the columns in 'cellID' and 'ctrl_sol'  
+  ctrl2 <- ctrl %>%
+    dplyr::select(ID, solution_1) %>%
+    rename(cellID = ID, ctrl_sol = solution_1)
+  
+  rmv2 <- rmv %>%
+    dplyr::select(ID, solution_1) %>%
+    rename(cellID = ID, rmv_sol = solution_1)
+  
+  #Create an object with the two solutions
+  soln <- ctrl2
+  soln$rmv_sol <-  rmv2$rmv_sol
+  
+  #Combine the result and call them differently if a PUs in present in both the solution, or only in one of them
+  soln <- mutate(soln, Combined = as.numeric(ctrl_sol + rmv_sol)) %>%
+    mutate(Compare = case_when(Combined == 2 ~ "Same",
+                               ctrl_sol == 1 & rmv_sol == 0 ~ "Removed (-)",
+                               ctrl_sol == 0 & rmv_sol == 1 ~ "Added (+)",
+                               Combined == 0 ~ "Not Selected"),
+           Compare = factor(Compare, levels = c("Added (+)", "Same", "Removed (-)", "Not Selected"))) %>%
+    filter(!is.na(Compare))
+  
+  # label_loc$label <- paste0("Area: ",round((sum(rmv$solution_1) - sum(ctrl$solution_1))/ sum(ctrl$solution_1)*100, 1), "%\nCost: ",round((sum(rmv$solution_1*rmv$cost) - sum(ctrl$solution_1*ctrl$cost))/ sum(ctrl$solution_1*ctrl$cost)*100, 1), "%\n")
+  # label_loc$label <- paste0("Area: ",round((sum(rmv$solution_1) - sum(ctrl$solution_1))/ sum(ctrl$solution_1)*100, 1), "%")
+  
+  #Plot the results
+  gg <- ggplot() +
+    geom_sf(data = soln, aes(fill = Compare), colour = NA, size = 0.0001) +
+    theme_bw() +
+    theme(axis.title = element_blank(), text = element_text(size = 20), plot.title = element_text(size = 12)) +
+    scale_fill_manual(values = c("Added (+)" = "Red", "Same" = "ivory3", "Removed (-)" = "Blue", "Not Selected" = "ivory4"), drop = FALSE)
+  
+  return(gg)
+}
+
+#' for 3 solutions
+
+fCompareSolutions <- function(ctrl, rmv, aaa){
+  
+  #Select only the ID column and the solution column; change the name of the columns in 'cellID' and 'ctrl_sol'  
+  ctrl2 <- ctrl %>%
+    dplyr::select(ID, solution_1) %>%
+    rename(cellID = ID, ctrl_sol = solution_1)
+  
+  rmv2 <- rmv %>%
+    dplyr::select(ID, solution_1) %>%
+    rename(cellID = ID, rmv_sol = solution_1)
+  
+  rmv3 <- aaa %>%
+    dplyr::select(ID, solution_1) %>%
+    rename(cellID = ID, rmv_sol3 = solution_1)
+  
+  #Create an object with the two solutions
+  soln <- ctrl2
+  soln$rmv_sol <- rmv2$rmv_sol
+  soln$rmv_sol3 <- rmv3$rmv_sol3
+  
+  #Combine the result and call them differently if a PUs in present in both the solution, or only in one of them
+  soln <- mutate(soln, Combined = as.numeric(ctrl_sol + rmv_sol + rmv_sol3)) %>%
+    mutate(Compare = case_when(Combined == 3 ~ "Same",
+                               ctrl_sol == 1 & rmv_sol == 1 & rmv_sol3 == 0 ~ "No species & Total area",
+                               ctrl_sol == 0 & rmv_sol == 1 & rmv_sol3 == 1 ~ "Total area & Fraction of the area",
+                               ctrl_sol == 1 & rmv_sol == 0 & rmv_sol3 == 1 ~ "No species & Fraction of the area",
+                               ctrl_sol == 1 & rmv_sol == 0 & rmv_sol3 == 0 ~ "No species",
+                               ctrl_sol == 0 & rmv_sol == 1 & rmv_sol3 == 0 ~ "Total area",
+                               ctrl_sol == 0 & rmv_sol == 0 & rmv_sol3 == 1 ~ "Fraction of the area",
+                               Combined == 0 ~ "Not Selected"),
+           Compare = factor(Compare, levels = c("Same",
+                                                "No species & Total area",
+                                                "Total area & Fraction of the area",
+                                                "No species & Fraction of the area",
+                                                "No species",
+                                                "Total area",
+                                                "Fraction of the area", 
+                                                "Not Selected"))) %>%
+    filter(!is.na(Compare))
+  
+  # label_loc$label <- paste0("Area: ",round((sum(rmv$solution_1) - sum(ctrl$solution_1))/ sum(ctrl$solution_1)*100, 1), "%\nCost: ",round((sum(rmv$solution_1*rmv$cost) - sum(ctrl$solution_1*ctrl$cost))/ sum(ctrl$solution_1*ctrl$cost)*100, 1), "%\n")
+  # label_loc$label <- paste0("Area: ",round((sum(rmv$solution_1) - sum(ctrl$solution_1))/ sum(ctrl$solution_1)*100, 1), "%")
+  
+  #Plot the results
+  gg <- ggplot() +
+    geom_sf(data = soln, aes(fill = Compare), colour = "black", size = 0.0001) +
+    theme_bw() +
+    theme(axis.title = element_blank(), text = element_text(size = 20), plot.title = element_text(size = 12)) +
+    scale_fill_manual(values = c("Same" = "red",
+                                 "No species & Total area" = "magenta",
+                                 "Total area & Fraction of the area" = "blue",
+                                 "No species & Fraction of the area" = "darkorchid",
+                                 "No species" = "limegreen",
+                                 "Total area" = "orange",
+                                 "Fraction of the area" = "lightsalmon1",
+                                 "Not Selected" = "white"))
+  
+  return(gg)
+}
+
+#' kappa correlation plot
+
+# based on Alvise's function
+
+fcreate_kappacorrplot <- function(sol1, sol2, sol3, sol4, dir) {
+  
+  library(irr)
+  library(corrplot)
+  
+  Species <- sol1 %>% 
+    as_tibble() %>% 
+    dplyr::select(solution_1) %>% 
+    dplyr::rename(Species = solution_1)
+  Species_Fisheries <- sol2 %>% 
+    as_tibble() %>% 
+    dplyr::select(solution_1) %>% 
+    dplyr::rename(Species_Fisheries = solution_1)
+  Species_CoastalProtection <- sol3 %>% 
+    as_tibble() %>% 
+    dplyr::select(solution_1) %>% 
+    dplyr::rename(Species_CoastalProtection = solution_1)
+  Species_Carbon <- sol4 %>% 
+    as_tibble() %>% 
+    dplyr::select(solution_1) %>% 
+    dplyr::rename(Species_Carbon = solution_1)
+  
+  s_list <- list(Species, Species_Fisheries, Species_CoastalProtection, Species_Carbon)
+  y = 1
+  s_matrix <- list()
+  for(i in 1:4){
+    for(j in 1:4){
+      kappa_temp <- irr::kappa2(bind_cols(s_list[[i]], s_list[[j]]))
+      kappa_corrvalue <- kappa_temp$value
+      kappa_pvalue <- kappa_temp$p.value
+      s_matrix[[y]] <- cbind(colnames(s_list[[i]]), colnames(s_list[[j]]), kappa_corrvalue, kappa_pvalue)
+      y = y+1
+    }
+  }
+  s_matrix_all <- do.call(rbind, s_matrix) %>% 
+    as_tibble()
+  colnames(s_matrix_all)[1:2] <- c('plan1','plan2')
+  
+  matrix_final1 <- s_matrix_all %>% 
+    as_tibble() %>% 
+    dplyr::select(-kappa_pvalue) %>% 
+    pivot_wider(names_from = plan2, values_from = kappa_corrvalue) %>% 
+    as.matrix()
+  
+  matrix_final2 <- s_matrix_all %>% 
+    as_tibble()
+  
+  write_csv(matrix_final2, paste0(dir,"kappa_matrix.csv"))
+  
+  # creating corrplot
+  rownames(matrix_final1) <- matrix_final1[,1]
+  n <- 4 + 1 # 4 is the number of inputted scenarios
+  matrix_final2 <- matrix_final1[,2:n]
+  class(matrix_final2) <- "numeric"
+  
+  col <- colorRampPalette(c("#BB4444", "#EE9988", "#FFFFFF", "#77AADD", "#4477AA"))
+  plot <- corrplot(matrix_final2, method = "shade", cl.lim = c(-0.02,1), tl.col = "black", addCoef.col = "black",
+                   col=col(200), tl.srt=45)
+  return(plot)
+}
