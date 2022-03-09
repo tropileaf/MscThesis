@@ -1,8 +1,12 @@
 ---
 title: "Cross-sectoral conservation of the Indian Ocean"
 author: "Lea Fourchault"
-date: "22/02/2022"
-output: html_document
+date: "08/03/2022"
+output: 
+ html_document:
+    toc: true
+    toc_float: true
+ 
 ---
 <style type="text/css">
 
@@ -39,38 +43,6 @@ pre { /* Code block - determines code spacing between lines */
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
-
----
-
-# Table of Contents
-# Introduction
-# Materials & Methods
-## Workflow with Prioritizr 
-## Overview of data  & layers
-## Planning region 
-## Conservation features & targets
-### IBAs
-### IMMAs
-### EBSAs
-### Deep-sea features : seamounts, ridges, plateaus, vents 
-### Targets dataframe
-## Cost layer
-### CFC
-### PMN
-### Exploration areas
-### Reserved areas
-### Shipping
-### Fishing *use cost layer already created?*
-# Prioritizr problems
-### Basic run (only Cons features)
-### Cons features, fishing
-### Cons features, mining (lock-out expl  & res areas; assign cost for PMN areas)
-### Cons features, fishing + mining 
-### Cons features, shipping 
-# Discussion
-## Potential improvements
-# Conclusion
-
 ---
 
 Resolved questions:
@@ -85,49 +57,52 @@ Resolved questions:
 + shipping raster (Halpern et al., 2015) is too heavy to be converted to polygon, what could be other methods (not using as.polygon)? RESAMPLE if resolution <1°. Resolution = 934m*934m (! 1° at equator = 111km = 60 nm; [convert](https://www.johndcook.com/how_big_is_a_degree.html); resolution too fine so need resampling). RESOLVED: no resampling, overlay raster with PUs (exactextractr) to attribute mean raster cells value to PUs (no weighted mean because raster cells are all equal-area because Mollweide proj)
 + how to remove EEZs from PUs? RESOLVED: find EEZ shp and spatial predicates, inverse overlay with Bndry, recreate PUs
 + setting  targets. RESOLVED: 30% for rpz area, 70% for important/rare feature; create dataframe with 1 column: features, 1 column: targets (match order)
-+ cross inactive vents & PUs - done
++ *cross inactive vents & PUs - done*
++ check research questions. RESOLVED keep Ant's questions
++ Error in h(simpleError(msg, call)) : error in evaluating the argument 'x' in selecting a method for function 'add_relative_targets': error in evaluating the argument 'features' in selecting a method for function 'problem': object 'Cons_feats' not found. RESOLVED: use string: features = "x", "y"; instead of creating Cons_feats tibble
++ cannot install lpsymphony: almost compiled but failed because did not find directory for gfortran AND see this link: issues with Mojave https://www.cynkra.com/blog/2021-03-16-gfortran-macos/ : brew and gfortran cask deprecated since 2021 (still work if installed before but i didn't). RESOLVED: install Gurobi using student email
++ PUs: when mutating FishingCost column to PUs, creates duplicate of 'geometry' column called 'Fishing.geometry'. RESOLVED don't forget to add dataframe: dataframeDOLLARcolumn name: PUs <- PUs %>% mutate(Fishing = FishingCost$FishingCost)
++ *create new PUs with ABNJ only - done but check method*, methodology not checked
++ general bugs to run code on .rmd file. Use knitr::spin instead. I also replaced the initial chunk with ```{r setup, include=FALSE} knitr::opts_chunk$set(echo = TRUE)``` but no result, maybe need to reinstall r and r studio
 
 ---
 
-Current questions & issues:
+Current questions & updates:
 
-+ ongoing - pricing deep-sea mineral resources (I am looking for more papers especially regarding CFC)
-+ check research questions
-+ overlay shipping & PUs + plot with log10?
-+ how to assign price to mining shps / create cost layer?
-+ assigning targets - Cons_feats tibble created
+
++ ongoing - pricing deep-sea mineral resources: for CFC *we know the area based on Crust.shp; we know CFC mean specific-surface areas = 325 m2/g (Hein et al., 2000; found in Hein et al., 2013) -> can find tonnage; then, we know chemical composition of CFC in Indian Ocean (given in wt% or ppm=g/tonne, for ex: 392 Mo ppm; Fe=22wt% - see Hein, 2014 or Petersen et al., 2016) -> can multiply by CFC tonnage to get tonnage for each mineral; then multiply by market prices (mean over 5 yrs?) to estimate total value of CFC in Indian Ocean?*
++ I have emailed Dr. Mizell about her calculations of CFC tonnage for the Indian Ocean (paper only gives global tonnage)
+
+*Coding questions, will think about it some more*
+
++ how to assign price to mining shps / create mining cost layer once value of deep-sea resources is computed?
++ overlay shipping & PUs + plot with log10: partly resolved using exact_extractr but issues with +1 and log10 and when plotting PUxShipping: not a map but a scatterplot; issues with transformation/reprojection?
 
 --- 
 
 Parameters we agree on for first prioritizr run
 
 + PUs = ABNJ only
-+ cons feats = IMMAs, IBAs, chosen EBSAs, vents (active + inactive), seamounts, plateaus; no aquamaps
-+ mining cost = value/t * density * area, discount rate and other improvements to be determined later (if any), USD
++ cons_feats = IMMAs, IBAs, chosen EBSAs, vents (active + inactive), seamounts, plateaus; no aquamaps
++ PMN mining value = value/t * density * area, discount rate and other improvements to be determined later (if any), USD
 + fishing cost = removed fish mass * fish value (layer created by Jase), USD
-+ shipping cost = mean of shipping raster cells' values for each PU, not USD (intensity)
-+ targets = 30% for rpz area, 70% for important
++ shipping cost = mean of shipping raster cells' values for each PU using exact_extracr, not USD (intensity) OR SHOULD WE USE SHIPPING AS A PENALTY?
++ targets = 30% for rpz area, 70% for important/rare feature
 
 ---
 
 
 # Introduction
 
+**Aim**
+
 *This project aims to identify areas for MPAs that maximise the conservation of biologically and ecologically important areas in the Indian Ocean's ABNJS, across all depths, while minimizing conflict with local industrial stakeholders - including the fishing, shipping, and deep-sea mining industries.*
 
-**Possible research questions**
+**Current research questions**
 
-Ranked from most general to most precise, can be same question with different wording (some are in passive form, I know it's better to use active but some sound weird when saying 'we'?)
-
-1. how can marine spatial planning adapt to a time of increased anthropogenic pressures?
-2. how can the interests of multiple industrial stakeholders be incorporated into MPA design?
-3. how can value be estimated in the context of data-poor industries?
-4. which areas are most valuable to industrial stakeholders in the Indian Ocean?
-5. how can we design MPAs that minimize trade-offs with industrial stakeholders in the Indian Ocean?
-6. how can we design MPAs that maximize biodiversity conservation across depth layers in the Indian Ocean?
-7. how can we quantify/estimate trade-offs amongst industries in the Indian Ocean?
-8. how can we quantify/estimate trade-offs between industries and conservation in the Indian Ocean? and,
-9. how can such trade-offs with industrial stakeholders be minimized when designing MPAs?
+1. How can future seabed mining be included in spatial planning?
+2. What is the potential spatial overlap among biodiversity, fishing, shipping and seabed mining in the Indian Ocean high seas?
+3. Where could we place reserves in the Indian Ocean high seas that meet conservation objectives whilst minimsing conflict with fishing and seabed mining? 
 
 Why ABNJs?
 
@@ -199,7 +174,7 @@ Inputs needed:
 
 ## Layers overview
 
-blue habitats **do not include hydro vents**, so will use Beaulieu & Szanfranski (2020) [link](https://doi.pangaea.de/10.1594/PANGAEA.917894?format=html#download)
+blue habitats do not include hydro vents, so will use Beaulieu & Szanfranski (2020) [link](https://doi.pangaea.de/10.1594/PANGAEA.917894?format=html#download)
 
 
 Input type   |  Topic                 | Reference/source (format)
@@ -227,7 +202,9 @@ Input type   |  Topic                 | Reference/source (format)
 cCRS <- "+proj=robin +lon_0=0 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs" # Robinson projection
 world <- ne_countries(scale = "medium", returnclass = "sf") %>% 
   st_transform(cCRS)
-Region <- c(xmin = 18, xmax = 130, ymin = -39, ymax = 34) # Indian Ocean limits
+#Region <- c(xmin = 18, xmax = 140, ymin = -39, ymax = 34) 
+Region <- c(xmin = 20, xmax = 120, ymin = -60, ymax = 20) 
+# Indian Ocean limits: CIA World Factbook (but see: According to the International Hydrographic Organization (IHO) and the United Nations Oceans Atlas, the area from 40°S latitude to 60°S latitude is included in the Indian Ocean. The area that encircles the globe from 60°S latitude to the coast of Antarctica is called The Great Southern Ocean. The Indian Ocean's width extends from 45° E longitude to 110°East longitude.) Also, Region has big impact on final plan because fishing cost is much lower as latitude increases towards south pole
 Bndry <- fSpatPlan_Get_Boundary(Region, cCRS) # boundary
 
 # intersect bndry and high seas
@@ -407,7 +384,7 @@ PUs <- PUs %>%
   mutate(Active_Vents = PUxVentsActive)
 
 VentsInactive <- filter(Vents, Activity == "inactive")
-VentsInactiveSF <- st_as_sf(VentsActive, coords = c(x = "Longitude", y = "Latitude"), crs = 4326) %>% 
+VentsInactiveSF <- st_as_sf(VentsInactive, coords = c(x = "Longitude", y = "Latitude"), crs = 4326) %>% 
   st_transform(cCRS)
 
 PUxVentsInactive <- st_contains(PUs,VentsInactiveSF, sparse = FALSE) %>%
@@ -420,15 +397,17 @@ PUs <- PUs %>%
 
 ```{r vents plot, echo = FALSE, message = FALSE, warning = FALSE, results = "hide"}
 world <- ne_countries(scale = "medium", returnclass = "sf")
-IndianO <- c(xmin = 17.47941, ymin = -38.7402, xmax = 129.552, ymax = 33.82872)
+#IndianO <- c(xmin = 17.47941, ymin = -38.7402, xmax = 129.552, ymax = 33.82872)
+IndianO <- c(xmin = 20, xmax = 120, ymin = -60, ymax = 20)
 
-ggplot() + 
-  geom_sf(data = world) + 
-  geom_sf(data = VentsActiveSF) +
-  ggtitle("Active vents after st_tranform(cCRS)") +
-  coord_sf(xlim = c(IndianO[["xmin"]], IndianO[["xmax"]]), ylim = c(IndianO[["ymin"]], IndianO[["ymax"]]), expand = FALSE) 
+#ggplot() + 
+ # geom_sf(data = world) + 
+  #geom_sf(data = VentsInactiveSF) +
+  #ggtitle("Active vents after st_tranform(cCRS)") +
+  #coord_sf(xlim = c(IndianO[["xmin"]], IndianO[["xmax"]]), ylim = c(IndianO[["ymin"]], IndianO[["ymax"]]), expand = FALSE) 
 
-#PUxVents <- st_join(PUs, VentsActiveSF, join = st_within) #no longer needed
+# no longer needed
+#PUxVents <- st_join(PUs, VentsActiveSF, join = st_within) 
 #VentsActiveSFClean <- dplyr::select(VentsActiveSF, Name.ID, geometry)
 #VentsActiveSFCleanBuff <- st_buffer(VentsActiveSFClean, dist = 1000)
 #PUxVents <- st_intersects(VentsActiveSF, PUs)
@@ -461,6 +440,8 @@ Conservation features
 
 ```{r Conservation features plot, echo = FALSE, message = FALSE, warning = FALSE}
 
+IndianO <- c(xmin = 20, xmax = 120, ymin = -60, ymax = 20)
+
 ggplot() + 
   geom_sf(data = world) +
   geom_sf(data = NEIO_09,  aes(color="A"), show.legend = "line")+ 
@@ -481,66 +462,48 @@ ggplot() +
   geom_sf(data = VentsActiveSF,  aes(color="F"), show.legend = "line")+
   geom_sf(data = VentsInactiveSF,  aes(color="G"), show.legend = "line")+
   ggtitle("IBA, IMMA, EBSAs, Seamounts, Plateaus, Vents")+ 
-  coord_sf(xlim = c(IndianO[["xmin"]], IndianO[["xmax"]]), ylim = c(IndianO[["ymin"]], IndianO[["ymax"]]), expand = FALSE)+
+  coord_sf(xlim = c(18, 130), ylim = c(22, -60), expand = FALSE)+
   scale_color_manual(values = c("A" = "grey", "B" = "black", "C" = "blue", "D" = "green", "E" = "purple", "F" = "red", "G" = "brown"), 
                      labels = c("EBSAs", "Seamounts", "Plateaus", "IBAs", "IMMAs", "Active vents", "Inactive Vents"),
                      name = "Legend") 
 
 ```
+
+### Longhurst provinces
+
+```{r longhurst plot, echo = FALSE, message = FALSE, warning = FALSE}
+
+longh <- st_read(file.path("Data","LonghurstProvinces","Longhurst_world_v4_2010.shp")) %>% 
+  st_make_valid()
+longhRob <- st_transform(longh, cCRS)
+
+nr <- st_nearest_feature(PUs, longhRob)
+
+PUs <- PUs %>% 
+  mutate(ProvCode = longh$ProvCode[nr],
+         ProvDescr = longh$ProvDescr[nr])
+
+ggplot() + 
+  geom_sf(data = world, color = "grey20", fill = "grey20", size = 0.1, show.legend = FALSE) +
+  geom_sf(data = PUs, aes(fill = ProvCode), colour = "grey50", size = 0.05, alpha = 0.7, show.legend = TRUE) +
+  coord_sf(xlim = c(18, 130), ylim = c(22, -60), expand = FALSE)
+           
+```
+
 ### Targets dataframe
 
-```{r Conservation features and targets, echo = FALSE, message = FALSE, warning = FALSE}
+```
 
-Cons_feats <- tibble(Features = c("IBA", "IMMA", "NEIO_09", "NWIO_14", "SIO_11", "SIO_19", "SIO_22", "SIO_23", "SIO_30", "SIO_32", "SIO_35", "SIO_36", "SIO_37","Seamounts", "Plateaus", "Active_Vents", "Inactive_Vents"), Targets = c(0.3, 0.3, 0.3, 0.3, 0.3, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.3, 0.3, 0.7, 0.7))
+#Cons_feats <- tibble(Features = c("IBA", "IMMA", "NEIO_09", "NWIO_14", "SIO_11", "SIO_19", "SIO_22", "SIO_23", "SIO_30", "SIO_32", "SIO_35", "SIO_36", "SIO_37","Seamounts", "Plateaus", "Active_Vents", "Inactive_Vents"), Targets = c(0.3, 0.3, 0.3, 0.3, 0.3, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.3, 0.3, 0.7, 0.7))
 
 ```
 
-## Cost layer
+## Locked out areas
 
-Composed of 
+### polymetallic nodules / polymetallic sulfides: exploration & reserved areas
 
-+ PMN and CFC areas (Sharma, 2011 for USD valuation)
-+ Exploration & reserved areas of deep-sea mining (lock out because won't agree to lose investments)
-+ Fishing effort (using ready-made cost layer in Spatial Planning repo)
-+ Shipping routes (use value of cell in Halpern et al. (2015), 2013 dataset for relative cost)
+```{r Locked out, echo = FALSE, message = FALSE, warning = FALSE, results = "hide"}
 
-Need to define how to combine these costs into 1 layer. Mult-C Sync software (Moffett et al., 2005  / Cameron et al., 2008)? 
-
-Or: running multiple prioritization problems and defining **no-regret** MPAs across stakeholders. 
-
-### CFC
-
-Cobalt-rich Ferromanganese Crusts. Still researching how to value.
-
-```{r CFC, echo = FALSE, results = "hide", message = FALSE, warning = FALSE}
-CFC <- "~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Costs/Mining_resources/Crust/Crust_areas_Hein2013.shp" 
-PUxCFC <- fSpatPlan_Get_Polyg(CFC, PUs)  # function returns out as a logical vector
-PUs <- PUs %>% 
-  mutate(CFC = PUxCFC) # Add logical vector to variable
-```
-
-### PMN
-
-Areas rich in PolyMetallic Nodules. **Monetary value** could be assigned using:
-
-+ density: 5.6kg/sqm in Indian Ocean basin (Sharma, 2011) - an approximation but better than nothing?
-[link](https://www.resolve.ngo/docs/mar_technol_soc_j_45_28a.pdf)
-+ value: 320-1,100USD/tonne of nodules (CRU Consulting, 2019) [link](https://isa.org.jm/files/files/documents/CRU_ISA%20Polymetallic%20nodule%20valuation%20report_24Aug2020.pdf)
-+ size of PMN area: #of PUs that intersect with PMN layer * PU size (1000sqkm)
-+ extraction rate: 1.5Mt/yr for 20 yrs (Sharma, 2011) (but using this brings even greater uncertainty, I think)
-
-```{r PMN, echo = TRUE,  results = "hide", message = FALSE, warning = FALSE}
-PMN <- "~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Costs/Mining_resources/Nodules/Nodules_Hein2013.shp"
-PUxPMN <- fSpatPlan_Get_Polyg(PMN, PUs)  
-PUs <- PUs %>% 
-  mutate(PMN = PUxPMN)
-```
-
-### Exploration areas 
-
-We need to **lock out** those areas, as mining companies have invested heavily into exploration and will not agree to lose access.
-
-```{r expl, echo = FALSE, results = "hide", message = FALSE, warning = FALSE}
 ExplPMN <- "~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Costs/Mining_contractors/ContractorAreas/01_pmn_exploration_areas.shp"
 PUxExplPMN <- fSpatPlan_Get_Polyg(ExplPMN, PUs)  
 PUs <- PUs %>% 
@@ -551,65 +514,240 @@ PUxExplPMS <- fSpatPlan_Get_Polyg(ExplPMS, PUs)
 PUs <- PUs %>% 
   mutate(ExplPMS = PUxExplPMS)
 
-ExplCFC <- "~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Costs/Mining_contractors/ContractorAreas/03_cfc_exploration_areas.shp"
-PUxExplCFC <- fSpatPlan_Get_Polyg(ExplCFC, PUs)  
-PUs <- PUs %>% 
-  mutate(ExplCFC = PUxExplCFC)
-```
-
-### Reserved areas 
-
-Areas reserved for mining exploitation by developing countries - can also be locked out (same reasoning as above).
-
-```{r res, echo = FALSE, results = "hide", message = FALSE, warning = FALSE}
 ResPMN <- "~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Costs/Mining_contractors/ContractorAreas/04_pmn_reserved_areas.shp"
 PUxResPMN <- fSpatPlan_Get_Polyg(ResPMN, PUs)  
 PUs <- PUs %>% 
   mutate(ResPMN = PUxResPMN)
 
-ResCFC <- "~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Costs/Mining_contractors/ContractorAreas/05_cfc_reserved_areas.shp"
-PUxResCFC <- fSpatPlan_Get_Polyg(ResCFC, PUs)  
-PUs <- PUs %>% 
-  mutate(ResCFC = PUxResCFC)
-```
+``` 
 
-```{r Mining layer, echo = FALSE, message = FALSE, warning = FALSE, results = "hide"}
+
+```{r Plotting Locked out, echo = FALSE, message = FALSE, warning = FALSE}
+# plotting locked out areas
+
 world <- ne_countries(scale = "medium", returnclass = "sf")
-IndianO <- c(xmin = 17.47941, ymin = -38.7402, xmax = 129.552, ymax = 33.82872)
-CFC <- st_read("~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Costs/Mining_resources/Crust/Crust_areas_Hein2013.shp")
-PMN <- st_read ("~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Costs/Mining_resources/Nodules/Nodules_Hein2013.shp")
+IndianO <- c(xmin = 18, ymin = -60, xmax = 130, ymax = 22)
 Expl_PMN <- st_read ("~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Costs/Mining_contractors/ContractorAreas/01_pmn_exploration_areas.shp")
 Expl_PMS <- st_read ("~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Costs/Mining_contractors/ContractorAreas/02_pms_exploration_areas.shp")
-Expl_CFC <- st_read ("~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Costs/Mining_contractors/ContractorAreas/03_cfc_exploration_areas.shp")
 Res_PMN <- st_read ("~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Costs/Mining_contractors/ContractorAreas/04_pmn_reserved_areas.shp")
-Res_CFC <- st_read ("~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Costs/Mining_contractors/ContractorAreas/05_cfc_reserved_areas.shp")
+
+ggplot() + 
+  geom_sf(data = world) +
+  geom_sf(data = Expl_PMN, aes(color="A"), show.legend = "line") + 
+  geom_sf(data = Expl_PMS, aes(color="B"), show.legend = "line") +
+  geom_sf(data = Res_PMN, aes(color="C"), show.legend = "line") +
+  scale_color_manual(values = c("A" = "red", "B" = "yellow", "C" = "black"),
+                     labels = c("Expl_PMN", "Expl_PMS", "Res_PMN"),
+                     name = "Legend") +
+  ggtitle("Exploration & Reserved areas") + 
+  coord_sf(xlim = c(18, 130), ylim = c(22, -60), expand = FALSE)
+
 ```
 
-Mining areas
+## Cost layer
 
-```{r Mining layer plot, echo = FALSE, message = FALSE, warning = FALSE}
+Composed of 
+
++ PMN and CFC areas (Sharma, 2011/ Mizell et al., 2022 for USD valuation) - in progress
++ Fishing effort (using ready-made cost layer in Spatial Planning repo)
++ Shipping routes (use value of cell in Halpern et al. (2015), 2013 dataset for relative cost) - in progress, but should be used as penalty, not cost?
+
+Need to define how to combine these costs into 1 layer. Mult-C Sync software (Moffett et al., 2005  / Cameron et al., 2008)? 
+
+Or: running multiple prioritization problems and defining **no-regret** MPAs across stakeholders. 
+
+### Mineral resources
+
+```{r Plot PMN CFC, echo = FALSE, message = FALSE, warning = FALSE}
+#' Plotting mining resources
+
+world <- ne_countries(scale = "medium", returnclass = "sf")
+#IndianO <- c(xmin = 17.47941, ymin = -38.7402, xmax = 129.552, ymax = 33.82872)
+IndianO <- c(xmin = 20, xmax = 120, ymin = -60, ymax = 20)
+CFC <- st_read("~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Costs/Mining_resources/Crust/Crust_areas_Hein2013.shp")
+PMN <- st_read ("~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Costs/Mining_resources/Nodules/Nodules_Hein2013.shp")
 ggplot() + 
   geom_sf(data = world) +
   geom_sf(data = CFC, aes(color="A"), show.legend = "line") + 
   geom_sf(data = PMN, aes(color="B"), show.legend = "line") + 
-  geom_sf(data = Expl_PMN, aes(color="C"), show.legend = "line") + 
-  geom_sf(data = Expl_PMS, aes(color="D"), show.legend = "line") +
- # geom_sf(data = Expl_CFC, aes(color="E"), show.legend = "line") +
-  geom_sf(data = Res_PMN, aes(color="F"), show.legend = "line") +
- # geom_sf(data = Res_CFC, aes(color="G"), show.legend = "line") +
-  scale_color_manual(values = c("A" = "grey", "B" = "brown", "C" = "orange", "D" = "red", "F" = "yellow"), 
-                     labels = c("CFC", "PMN", "Expl_PMN", "Expl_PMS", "Res_PMN"),
+  scale_color_manual(values = c("A" = "grey", "B" = "brown"),
+                     labels = c("CFC", "PMN"),
                      name = "Legend") +
-  ggtitle("PMN, CFC, Exploration & Reserved areas") + 
-  coord_sf(xlim = c(IndianO[["xmin"]], IndianO[["xmax"]]), ylim = c(IndianO[["ymin"]], IndianO[["ymax"]]), expand = FALSE)
+  ggtitle("Polymetallic Nodules and Cobalt-rich Ferromanganese Crust areas") + 
+  coord_sf(xlim = c(18, 130), ylim = c(22, -60), expand = FALSE)
+
+```
+
+CFC value
+script to get area modified from https://rpubs.com/rural_gis/255550
+
+```{r CFC, echo = FALSE, message = FALSE, warning = FALSE, results = "hide"}
+CFC <- "~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Costs/Mining_resources/Crust/Crust_areas_Hein2013.shp" 
+PUxCFC <- fSpatPlan_Get_Polyg(CFC, PUs)  # function returns out as a logical vector
+PUs <- PUs %>% 
+  mutate(CFC = PUxCFC)
+
+#load CFC areas polygon shapefile 
+CFC <- st_read("~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Costs/Mining_resources/Crust/Crust_areas_Hein2013.shp")
+CFCRobin <- st_transform(CFC, cCRS) #robin proj
+
+#run the intersect function, converting the output to a tibble in the process
+#int <- as_tibble(st_intersection(CFCRobin, BndryABNJ))
+int <- st_intersection(CFCRobin, BndryABNJ)
+
+#add in an area count column to the tibble (area of each CFC poly in intersect layer)
+int$CFCarea <- st_area(int)
+```
+
+Intersections between PUs and CFC in red - correct
+
+```{r plot CFC, echo = FALSE, message = FALSE, warning = FALSE}
+
+#plot the layers to visually check result of intersect
+plot (CFCRobin$geometry, col='green')
+plot(BndryABNJ$geometry, add=T)
+plot(int, col='red', add=T) #correct
+
+#group data by county area and calculate the total arable land area per county
+#output as new tibble
+AreaCFCtotal <- int %>%
+  summarise(areaCFCtot = sum(CFCarea))
+```
+
+```
+# CFC value code (so you can have a look)
+# script to get area modified from https://rpubs.com/rural_gis/255550
+
+CFC <- "~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Costs/Mining_resources/Crust/Crust_areas_Hein2013.shp" 
+PUxCFC <- fSpatPlan_Get_Polyg(CFC, PUs)  # function returns out as a logical vector
+PUs <- PUs %>% 
+  mutate(CFC = PUxCFC)
+
+#load CFC areas polygon shapefile 
+CFC <- st_read("~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Costs/Mining_resources/Crust/Crust_areas_Hein2013.shp")
+CFCRobin <- st_transform(CFC, cCRS) #robin proj
+
+#run the intersect function, converting the output to a tibble in the process
+#int <- as_tibble(st_intersection(CFCRobin, BndryABNJ))
+int <- st_intersection(CFCRobin, BndryABNJ)
+
+#add in an area count column to the tibble (area of each CFC poly in intersect layer)
+int$CFCarea <- st_area(int)
+
+#plot the layers to visually check result of intersect
+plot (CFCRobin$geometry, col='green')
+plot(BndryABNJ$geometry, add=T)
+plot(int, col='red', add=T) #correct
+
+#group data by county area and calculate the total arable land area per county
+#output as new tibble
+AreaCFCtotal <- int %>%
+  summarise(areaCFCtot = sum(CFCarea)) # = 2.256596e+12 [m^2]
+```
+**CFC area = 2.256596e+12 [m^2], seems a lot (see code above, no error messages but probably wrong somewhere)? Would be 2256596 sqkm, and I have 39803 PUs of 1000 sqkm each** 
+
+*Other method to check :* 
+area of CFC in PUs < 2753*1000 sqkm = 2.753e+6 sqm (see sum of TRUE intersections between PUs and CFC poly below)
+
+```
+sum(PUxCFC) # sum of cross = TRUE between PUs and CFC polyg
+[1] 2753
+
+```
+PMN - same code
+
+```{r PMN, echo = FALSE, message = FALSE, warning = FALSE, results = "hide"}
+
+# PMN value
+
+#script to get area modified from https://rpubs.com/rural_gis/255550
+
+#load county areas polygon shapefile 
+
+PMN <- "~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Costs/Mining_resources/Nodules/Nodules_Hein2013.shp"
+PUxPMN <- fSpatPlan_Get_Polyg(PMN, PUs)  
+PUs <- PUs %>% 
+  mutate(PMN = PUxPMN)
+
+PMN <- st_read("~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Costs/Mining_resources/Nodules/Nodules_Hein2013.shp")
+PMNRobin <- st_transform(PMN, cCRS) #robin proj
+
+#run the intersect function, converting the output to a tibble in the process
+int2 <- st_intersection(PMNRobin, BndryABNJ) #need this to avoid Error in UseMethod("st_area") : 
+#int2 <- as_tibble(st_intersection(PMNRobin, BndryABNJ)) #no applicable method for 'st_area' applied to an object of class "c('tbl_df', 'tbl', 'data.frame')"
+
+#add in an area count column to the tibble (area of each CFC poly in intersect layer)
+int2$PMNarea <- st_area(int2)
+```
+
+Intersection between PUs and PMN in red - correct
+
+```{r plot PMN, echo = FALSE, message = FALSE, warning = FALSE}
+
+#plot the layers to visually check result of intersect
+plot (PMNRobin$geometry, col='green')
+plot(BndryABNJ$geometry, add=T)
+plot(int2, col='red', add=T) #correct
+
+#group data by county area and calculate the total arable land area per county
+#output as new tibble
+AreaPMNtotal <- int2 %>%
+  summarise(areaPMNtot = sum(PMNarea)) #1.933646e+12 [m^2],  seems a lot?
+```
+
+**Same issue for PMN as for CFC: intersection area too high: gives 1.933646e+12 [m^2],  seems a lot?**
+
+*other method to check*
+area of PMN in PUs < 2075*1000 sqkm = 2.075e+6 sqm (see sum of TRUE intersections between PUs and CFC poly below)
+
+```
+# area of PMN in PUs should be < 2075*1000 sqkm because:
+ sum(PUxPMN)
+ [1] 2075
+# and 1 PU = 1000 sqkm
+### Fishing cost
+
+```{r Fishing cost, echo = FALSE, message = FALSE, warning = FALSE}
+ 
+#Fishing cost
+
+FishingCost <- terra::rast("Data/Cost/Cost_Raster_Sum.grd") %>% 
+  terra::as.polygons(trunc = FALSE, dissolve = FALSE, na.rm=FALSE) %>% # Convert to polygon data
+  st_as_sf() %>% # Convert to sf
+  st_transform(cCRS) %>% # transform to robinson
+  st_interpolate_aw(PUs, extensive = FALSE) %>% ## intersect with PUs
+  rename(FishingCost = layer)
+
+PUs <- PUs %>% 
+  mutate(Fishing = FishingCost$FishingCost)
+
+LogFishing <- log10(FishingCost$FishingCost)
+hist(LogFishing)
+PUs <- PUs %>% 
+  mutate(LogFishing = LogFishing)
+
+#' Plotting log of fishing cost
+
+ggplot() + 
+  geom_sf(data = world) +
+  geom_sf(data = PUs, aes(color=LogFishing)) + 
+  ggtitle("Fishing Cost (Log10)") + 
+  coord_sf(xlim = c(18, 130), ylim = c(22, -60), expand = FALSE)
+
+#(ggCost <- fSpatPlan_PlotCost(Cost, world)) # Plot cost
+
+#FishingCost <- fSpatPlan_Get_Cost(PUs, cCRS) ##make sure cost function is set to fetch .grd in proper directory ##cannot open .grd despite changing pathway in fx
+
+```
+
 
 ```
 
 ## Shipping
 
-Overlay shipping raster with polygons to get average intensity of shipping for 1 PU.
+Overlay shipping raster with polygons to get average intensity of shipping for 1 PU. **Check code, no errors but many issues.**
 
-```{r Shipping plot, echo = TRUE}
+```
 
 Shipping <- terra::rast("~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Costs/Shipping/shipping.tif")
 #View(Shipping)
@@ -644,155 +782,161 @@ ShippingCost <- terra::rast("~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Co
     rename(ShippingCost = layer)
 ```
 
-## Fishing
-
-```{r Fishing cost, echo = TRUE, warning = FALSE}
-
-#adding modified fx here to ensure it uses the right path
-
-fSpatPlan_Get_Cost <- function(PUs, cCRS){
-  
-  # TODO Add some filtering ability to get the cost only for specific groups
-  
-  FishingCost <- terra::rast("Data/Cost/Cost_Raster_Sum.grd") %>% 
-    terra::as.polygons(trunc = FALSE, dissolve = FALSE, na.rm=FALSE) %>% # Convert to polygon data
-    st_as_sf() %>% # Convert to sf
-    st_transform(cCRS) %>% # transform to robinson
-    st_interpolate_aw(PUs, extensive = FALSE) %>% ## intersect with PUs
-    rename(FishingCost = layer)
-}
-
-FishingCost <- fSpatPlan_Get_Cost(PUs, cCRS)
-PUs <- PUs %>% 
-  mutate(Fishing = FishingCost) #issues: no error but cannot check PU dataframe after this: Error in `[.data.frame`(x, i) : undefined columns selected; probably need to restart session
-hist(FishingCost$FishingCost) 
-#FishingCostPlusOne <- FishingCost$FishingCost + 1 #not needed, min >0 for PU=ABNJ
-hist(log10(FishingCost$FishingCost)) #drop after log10(x)=4, x=10^4=10,000? #no longer needed since in ABNJ max val = ##USD 5000, and most values are 10^1 - 10^2 USD
-
-ggplot() + 
-  geom_sf(data = world) +
-  geom_sf(data = FishingCost, aes(color=FishingCost)) +
-ggtitle("Fishing Cost All Values") + 
-  coord_sf(xlim = c(IndianO[["xmin"]], IndianO[["xmax"]]), ylim = c(IndianO[["ymin"]], IndianO[["ymax"]]), expand = FALSE)
-
-```
-
-``` 
-
-#section not needed anymore since no outliers when PUs=ABNJ
-
-FishingCostOutliers <- filter(FishingCost, Cost >= 22000) # check outliers
-
-hist(FishingCostOutliers$Cost)
-
-ggplot() + 
-  geom_sf(data = world) +
-  geom_sf(data = FishingCostOutliers, aes(color=Cost)) +
-ggtitle("Fishing Cost Outliers (>50,000 USD)") + 
-  coord_sf(xlim = c(IndianO[["xmin"]], IndianO[["xmax"]]), ylim = c(IndianO[["ymin"]], IndianO[["ymax"]]), expand = FALSE)
-
-FishingCostNoOutliers <- filter(FishingCost, Cost <= 22000) # remove outliers
-
-hist(FishingCostNoOutliers$Cost) #(49256 obs. = 524 outliers removed when #cut-off = 20,000)
-
-ggplot() + 
-  geom_sf(data = world) +
-  geom_sf(data = FishingCostNoOutliers, aes(color=Cost)) +
-ggtitle("Fishing Cost Without Outliers") + 
-  coord_sf(xlim = c(IndianO[["xmin"]], IndianO[["xmax"]]), ylim = c(IndianO[["ymin"]], IndianO[["ymax"]]), expand = FALSE)
-  
-```
-
 # Prioritizr problems
 
-## Basic run (Cons features)
+Trial runs
+```{r Prioritizr problems, echo = FALSE, message = FALSE, warning = FALSE}
 
-*Code based on Alvise's work, not as code here to avoid issues when knitting*
+PUs$Fishing[PUs$Fishing <  0.0001] <-  0.0001 #to avoid Warning in presolve_check.OptimizationProblem(compile(x)) :
+# planning units with very high (> 1e+6) or very low (< 1e-6) non-zero cost values note this may be a false positive
 
-```
+#' IBA & Fishing cost
 
-p_ConsFeats <- problem(PUs, features = Cons_feats$Features) %>% #issues because no cost_column
+p_IBA_Fishing <- problem(PUs, features = "IBA", cost_column = "Fishing") %>% 
   add_min_set_objective() %>%
-  add_relative_targets(Cons_feats$Targets) %>% 
+  add_relative_targets(0.9) %>%
   add_binary_decisions() %>%
-  add_lpsymphony_solver(verbose = FALSE) 
+  add_gurobi_solver(gap = 0.1, verbose = FALSE) 
 
-```
+p_IBA_Fishing_Sol <- solve(p_IBA_Fishing)
 
-### Cons features, fishing
+p_IBA_Fishing_Sol_Plot <- ggplot() +
+  ggtitle("IBA vs Fishing, Target = 0.9") +
+  geom_sf(data = world, colour ="grey70") +
+  geom_sf(data = p_IBA_Fishing_Sol, aes(fill = as.factor(solution_1)), size = 0.05) +
+  scale_fill_manual(values = c("NA", "red")) +
+  coord_sf(xlim = c(18, 130), ylim = c(22, -60), expand = FALSE) +
+  theme_bw() +
+  #scale_colour_gradientn(colours = colorspace::diverge_hcl(7)) +
+  theme(legend.title = element_blank(),
+        axis.title.x = element_blank(),
+        axis.title.y = element_blank())
 
-*code based on Alvise's work, not as code here to avoid issues when knitting*
+p_IBA_Fishing_Sol_Plot #looks correct 
 
+#' Active Vents & Fishing cost & target
 
-```
-
-p_ConsFeat_Fishing <- problem(PUs, features = Cons_feats$Features, cost_column = PUs$FishingCost) %>% 
-  add_min_set_objective() %>% 
-  add_relative_targets(Cons_feats$Targets) %>% 
+p_Active_Vents_Fishing <- problem(PUs, features = "Active_Vents", cost_column = "Fishing") %>% 
+add_min_set_objective() %>%
+  add_relative_targets(0.7) %>%
   add_binary_decisions() %>%
-  add_lpsymphony_solver(verbose = FALSE) 
-  
+  add_gurobi_solver(gap = 0.1, verbose = FALSE)
+
+p_Active_Vents_Fishing_Sol <- solve(p_Active_Vents_Fishing)
+
+p_Active_Vents_Fishing_Sol_Plot <- ggplot() +
+  ggtitle("Active Vents vs Fishing, Targets = 0.7") +
+  geom_sf(data = world, colour ="grey80") +
+  geom_sf(data = p_Active_Vents_Fishing_Sol, aes(fill = as.factor(solution_1)), size = 0.05) +
+  scale_fill_manual(values = c("NA", "red")) +
+  coord_sf(xlim = c(18, 130), ylim = c(22, -60), expand = FALSE) +
+  theme_bw() +
+  #scale_colour_gradientn(colours = colorspace::diverge_hcl(7)) +
+  theme(legend.title = element_blank(),
+        axis.title.x = element_blank(),
+        axis.title.y = element_blank())
+
+p_Active_Vents_Fishing_Sol_Plot # also looks correct
 ```
 
-### Cons features, mining
+Full run 
 
-*code based on Alvise's work, not as code here to avoid issues when knitting*
+```{r Prioritizr problems2, echo = FALSE, message = FALSE, warning = FALSE}
+#' All features & Fishing cost & targets
 
-*PMNCost will probably be created based on Sharma (2011) & CRU Consulting (2019)?*
-
-[prioritizr.net](https://prioritizr.net/reference/add_locked_out_constraints.html) says to use structure below to lock out polygons but need to look more into it
-
-# create problem with added locked out constraints using spatial polygon data
-
-```
-use: 
-
-locked_out <- sim_pu_polygons[sim_pu_polygons$locked_out == 1, ]
-p5 <- p1 %>% add_locked_out_constraints(locked_out)
-```
-or try
-
-```
-
-p_ConsFeat_Mining <- problem(PUs, features = Cons_feats$Features, cost_column = PUs$PMNCost) %>% 
-  add_min_set_objective() %>% 
-  add_relative_targets(Cons_feats$Targets) %>% 
+p_ConsFeat_Fishing <- problem(PUs, features = c("IBA", "IMMA", "NEIO_09", "NWIO_14", "SIO_11", "SIO_19", "SIO_22", "SIO_23", "SIO_30", "SIO_32", "SIO_35", "SIO_36", "SIO_37","Seamounts", "Plateaus", "Active_Vents", "Inactive_Vents"), cost_column = "Fishing") %>% 
+  add_min_set_objective() %>%
+  add_relative_targets(c(0.3, 0.3, 0.3, 0.3, 0.3, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.3, 0.3, 0.7, 0.7)) %>%
   add_binary_decisions() %>%
-  add_lpsymphony_solver(verbose = FALSE) %>%
-  add_locked_out_constraints("Expl_CFC", "Expl_PMN", "Expl_PMS", "Res_PMN", "Res_CFC")
+  add_gurobi_solver(gap = 0.1, verbose = FALSE)
+
+p_ConsFeat_Fishing_Sol <- solve(p_ConsFeat_Fishing)
+#plot(p_ConsFeat_Fishing_Sol, main = "solution")
+#lines(p_ConsFeat_Fishing_Sol[p_ConsFeat_Fishing_Sol$solution_1 > 0.5, ], col = "darkgreen", lwd = 2)
+
+p_ConsFeat_Fishing_Sol_Plot <- ggplot() +
+  ggtitle("Cons Feats vs Fishing, 0.3<Targets<0.7") +
+  geom_sf(data = world, colour ="grey80") +
+  geom_sf(data = p_ConsFeat_Fishing_Sol, aes(fill = as.factor(solution_1)), size = 0.05) +
+  scale_fill_manual(values = c("NA", "red")) +
+  coord_sf(xlim = c(18, 130), ylim = c(22, -60), expand = FALSE) +
+  theme_bw() +
+  #scale_colour_gradientn(colours = colorspace::diverge_hcl(7)) +
+  theme(legend.title = element_blank(),
+        axis.title.x = element_blank(),
+        axis.title.y = element_blank())
+
+p_ConsFeat_Fishing_Sol_Plot # shows that fishing cost is reduced between 40°-60°S, but maybe would be good to reduce target for IBAs/IMMAs or assign Longhurst to distribute better across latitudes
+
+
 ```
 
-### Cons features, mining + fishing
-
-*Assumes targets (ConsFeatures$amount) are set, code based on Alvise's work, not as code here to avoid issues when knitting*
+Run with lock out: no errors in  .R but won't knit
 
 ```
 
-p_ConsFeat_MiningFishing <- problem(PUs, features = Cons_feats, cost_column = PUs$MiningFishing) %>% 
-  add_min_set_objective() %>% 
-  add_relative_targets(Cons_features$Targets) %>%
+#' All features & Fishing cost & targets & locked-out exploration + reserved areas
+
+PUs["locked_out"] = PUs$ExplPMN | PUs$ExplPMS | PUs$ResPMN # create locked_out column (logical). If =<1 is TRUE, then locked_out is TRUE # https://stackoverflow.com/questions/54507486/merging-two-true-false-dataframe-columns-keeping-only-true
+
+#PUs["locked_out"] <- paste(PUs$ExplPMN, PUs$ExplPMS, PUs$ResPMN)
+#PUs %>% mutate(sum = rowSums(across(where(is.logical))))rowSums(Y) > 0
+#PUs$LockedOut <- ifelse(PUs$ExplPMN == "TRUE" | PUs$ExplPMS == "TRUE" | PUs$ResPMN == "TRUE")
+ 
+p_ConsFeat_Fishing_LockedOut <- problem(PUs, features = c("IBA", "IMMA", "NEIO_09", "NWIO_14", "SIO_11", "SIO_19", "SIO_22", "SIO_23", "SIO_30", "SIO_32", "SIO_35", "SIO_36", "SIO_37","Seamounts", "Plateaus", "Active_Vents", "Inactive_Vents"), cost_column = "Fishing") %>% 
+  add_min_set_objective() %>%
+  add_relative_targets(c(0.3, 0.3, 0.3, 0.3, 0.3, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.3, 0.3, 0.7, 0.7)) %>%
   add_binary_decisions() %>%
-  add_lpsymphony_solver(verbose = FALSE) %>%
-  add_locked_out_constraints("Expl_CFC", "Expl_PMN", "Expl_PMS", "Res_PMN", "Res_CFC")
+  add_locked_out_constraints(locked_out = "locked_out") %>%
+  add_gurobi_solver(gap = 0.1, verbose = FALSE)
+
+p_ConsFeat_Fishing_LockedOut_Sol <- solve(p_ConsFeat_Fishing_LockedOut)
+
+p_ConsFeat_Fishing_LockedOut_Sol_Plot <- ggplot() +
+  ggtitle("Cons Feats vs Fishing, Mining Contractors Locked Out, 0.3<Targets<0.7") +
+  geom_sf(data = world, colour ="grey80") +
+  geom_sf(data = p_ConsFeat_Fishing_Sol, aes(fill = as.factor(solution_1)), size = 0.05) +
+  scale_fill_manual(values = c("NA", "red")) +
+  coord_sf(xlim = c(18, 130), ylim = c(22, -60), expand = FALSE) +
+  theme_bw() +
+  #scale_colour_gradientn(colours = colorspace::diverge_hcl(7)) +
+  theme(legend.title = element_blank(),
+        axis.title.x = element_blank(),
+        axis.title.y = element_blank())
+
+p_ConsFeat_Fishing_LockedOut_Sol_Plot
 ```
 
-### Cons features, shipping
+```
 
-*Not sure what kind of data transformation is needed to have a file with present/absent shipping routes* 
+#' All features & Fishing cost & targets & locked-out exploration + reserved areas, change targets to check solver works
 
-*Or we can try estimating cost of shipping (question at start of .rmd) and combining with other costs into 1 layer*
+length(PUs$Plateaus[PUs$Plateaus==TRUE]) # check count of PUs that have plateaus inside
 
-*here, Shipping = mean values of pixels overlaid on PUs, so intensity of shippings; not USD* 
-
-```{r Shipping problem, echo = TRUE, warning = FALSE}
-
-p_ConsFeat_Shipping <- problem(PUs, features = Cons_feats$Features, cost_column = "PUs$Shipping") %>% 
-  add_min_set_objective() %>% 
-  add_relative_targets(Cons_feats$Targets) %>% 
+p_check_targets <- problem(PUs, features = c("IBA", "IMMA", "NEIO_09", "NWIO_14", "SIO_11", "SIO_19", "SIO_22", "SIO_23", "SIO_30", "SIO_32", "SIO_35", "SIO_36", "SIO_37","Seamounts", "Plateaus", "Active_Vents", "Inactive_Vents"), cost_column = "Fishing") %>% 
+add_min_set_objective() %>%
+  add_relative_targets(c(0.001, 0.001, 0.03, 0.03, 0.03, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.99, 0.99, 0.99, 0.99)) %>%
   add_binary_decisions() %>%
-  add_lpsymphony_solver(verbose = FALSE) #%>%
-  #add_locked_out_constraints("Shipping","Expl_CFC", "Expl_PMN", "Expl_PMS", "Res_PMN", "Res_CFC")
-```
+  add_locked_out_constraints(locked_out = "locked_out") %>%
+  add_gurobi_solver(gap = 0.1, verbose = FALSE)
+
+p_check_targets_sol <- solve(p_check_targets)
+
+p_check_targets_sol_plot <- ggplot() +
+  ggtitle("0.001<Targets<0.9") +
+  geom_sf(data = world, colour ="grey80") +
+  geom_sf(data = p_ConsFeat_Fishing_Sol, aes(fill = as.factor(solution_1)), size = 0.05) +
+  scale_fill_manual(values = c("NA", "red")) +
+  coord_sf(xlim = c(18, 130), ylim = c(22, -60), expand = FALSE) +
+  theme_bw() +
+  #scale_colour_gradientn(colours = colorspace::diverge_hcl(7)) +
+  theme(legend.title = element_blank(),
+        axis.title.x = element_blank(),
+        axis.title.y = element_blank())
+
+p_check_targets_sol_plot #correct
+
+``` 
 
 # Discussion
 
