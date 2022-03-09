@@ -1,16 +1,12 @@
 #' ---
 #' title: "Create a Spatial Plan"
-#' author: "Jason D. Everett"
-#' affiliation: "UQ/CSIRO/UNSW"
-#' date: "Last compiled on `r format(Sys.time(), '%A %d %B %Y')`"
+#' author: "Jason D. Everett, modified by Lea Fourchault"
+#' affiliation: "UQ/CSIRO/UNSW/Tropimundo"
+#' date: "Last compiled on March 8th, 2022"
 #' output: 
 #'   html_document
 #' ---
 #'
-
-##+ setup, include=FALSE
-knitr::opts_chunk$set(warning=FALSE, cache=FALSE, message=FALSE)
-# knitr::opts_chunk$set(collapse = TRUE, comment = "", warning = "off")
 
 #' ## Overview
 #' This code has been written to simplify the process for running a _prioritizr_ analysis on a given region. It is still a work in progress so feel free to submit pull requests with new features and code improvements.
@@ -61,7 +57,9 @@ fSpatPlan_Get_Polyg <- function(filen, PUs){
 cCRS <- "+proj=robin +lon_0=0 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs" # Robinson projection
 world <- ne_countries(scale = "medium", returnclass = "sf") %>% 
   st_transform(cCRS)
-Region <- c(xmin = 18, xmax = 130, ymin = -39, ymax = 34) # Indian Ocean limits
+#Region <- c(xmin = 18, xmax = 140, ymin = -39, ymax = 34) 
+Region <- c(xmin = 20, xmax = 120, ymin = -60, ymax = 20) 
+# Indian Ocean limits: CIA World Factbook (but see: According to the International Hydrographic Organization (IHO) and the United Nations Oceans Atlas, the area from 40 degrees S latitude to 60 degrees S latitude is included in the Indian Ocean. The area that encircles the globe from 60 degrees S latitude to the coast of Antarctica is called The Great Southern Ocean. The Indian Ocean's width extends from 45 degrees E longitude to 110 degrees East longitude.) 
 Bndry <- fSpatPlan_Get_Boundary(Region, cCRS) # boundary
 
 #ggplot(data = Bndry) + geom_sf()
@@ -80,7 +78,7 @@ Shape <- "Hexagon" # shape of PUs
 MinDepth <- 0
 MaxDepth <- 200 # but check for deep-sea?
 PUs <- fSpatPlan_Get_PlanningUnits(BndryABNJ, world, PU_size, Shape) # modified PUs with ABNJ only
-PUs <- fSpatPlan_Get_PlanningUnits(Bndry, world, PU_size, Shape) # original function
+#PUs <- fSpatPlan_Get_PlanningUnits(Bndry, world, PU_size, Shape) # original function
 
 #' Plot PUs
 
@@ -200,7 +198,8 @@ PUs <- PUs %>%
 #' Plotting features
 
 world <- ne_countries(scale = "medium", returnclass = "sf")
-IndianO <- c(xmin = 17.47941, ymin = -38.7402, xmax = 129.552, ymax = 33.82872)
+#IndianO <- c(xmin = 17.47941, ymin = -38.7402, xmax = 129.552, ymax = 33.82872)
+IndianO <- c(xmin = 20, xmax = 120, ymin = -60, ymax = 20)
 
 IMMA <- st_read ("~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Biodiv_features/IMMAs/iucn-imma.shp")
 IBA <- st_read ("~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Biodiv_features/IBAs/MarineIBA_IndianOcean.shp")
@@ -238,10 +237,29 @@ ggplot() +
   geom_sf(data = VentsActiveSF,  aes(color="F"), show.legend = "line")+
   geom_sf(data = VentsInactiveSF,  aes(color="G"), show.legend = "line")+
   ggtitle("IBA, IMMA, EBSAs, Seamounts, Plateaus, Vents")+ 
-  coord_sf(xlim = c(IndianO[["xmin"]], IndianO[["xmax"]]), ylim = c(IndianO[["ymin"]], IndianO[["ymax"]]), expand = FALSE)+
+  coord_sf(xlim = c(18, 130), ylim = c(22, -60), expand = FALSE)+
   scale_color_manual(values = c("A" = "grey", "B" = "black", "C" = "blue", "D" = "green", "E" = "purple", "F" = "red", "G" = "brown"), 
                      labels = c("EBSAs", "Seamounts", "Plateaus", "IBAs", "IMMAs", "Active vents", "Inactive Vents"),
                      name = "Legend") 
+
+#' Longhurst provinces
+
+longh <- st_read(file.path("Data","LonghurstProvinces","Longhurst_world_v4_2010.shp")) %>% 
+  st_make_valid()
+longhRob <- st_transform(longh, cCRS)
+
+nr <- st_nearest_feature(PUs, longhRob)
+
+PUs <- PUs %>% 
+  mutate(ProvCode = longh$ProvCode[nr],
+         ProvDescr = longh$ProvDescr[nr])
+
+ggplot() + 
+  geom_sf(data = world, color = "grey20", fill = "grey20", size = 0.1, show.legend = FALSE) +
+  geom_sf(data = PUs, aes(fill = ProvCode), colour = "grey50", size = 0.05, alpha = 0.7, show.legend = TRUE) +
+  coord_sf(xlim = c(18, 130), ylim = c(22, -60), expand = FALSE)
+
+
 #' ### Aquamaps 
 
 #' Get aquamaps data for our species and region 
@@ -279,7 +297,7 @@ ggplot() +
 
 #' ## Setting targets for conservation features
 
-Cons_feats <- tibble(Features = c("IBA", "IMMA", "NEIO_09", "NWIO_14", "SIO_11", "SIO_19", "SIO_22", "SIO_23", "SIO_30", "SIO_32", "SIO_35", "SIO_36", "SIO_37","Seamounts", "Plateaus", "Active_Vents", "Inactive_Vents"), Targets = c(0.3, 0.3, 0.3, 0.3, 0.3, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.3, 0.3, 0.7, 0.7))
+#Cons_feats <- tibble(Features = c("IBA", "IMMA", "NEIO_09", "NWIO_14", "SIO_11", "SIO_19", "SIO_22", "SIO_23", "SIO_30", "SIO_32", "SIO_35", "SIO_36", "SIO_37","Seamounts", "Plateaus", "Active_Vents", "Inactive_Vents"), Targets = c(0.3, 0.3, 0.3, 0.3, 0.3, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.3, 0.3, 0.7, 0.7))
 
 #' ## Get locked in areas 
 #LockedIn <- fSpatPlan_Get_MPAs(PUs, cCRS)
@@ -306,7 +324,7 @@ PUs <- PUs %>%
 #' plotting locked out areas
 
 world <- ne_countries(scale = "medium", returnclass = "sf")
-IndianO <- c(xmin = 17.47941, ymin = -38.7402, xmax = 129.552, ymax = 33.82872)
+IndianO <- c(xmin = 20, xmax = 120, ymin = -60, ymax = 20)
 Expl_PMN <- st_read ("~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Costs/Mining_contractors/ContractorAreas/01_pmn_exploration_areas.shp")
 Expl_PMS <- st_read ("~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Costs/Mining_contractors/ContractorAreas/02_pms_exploration_areas.shp")
 Res_PMN <- st_read ("~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Costs/Mining_contractors/ContractorAreas/04_pmn_reserved_areas.shp")
@@ -325,7 +343,7 @@ ggplot() +
 #' ## Get cost 
 #' Fishing cost
 #FishingCost <- fSpatPlan_Get_Cost(PUs, cCRS) ##make sure cost function is set to fetch .grd in proper directory
-                                    ##cannot open .grd despite changing pathway in fx
+##cannot open .grd despite changing pathway in fx
 
 FishingCost <- terra::rast("Data/Cost/Cost_Raster_Sum.grd") %>% 
   terra::as.polygons(trunc = FALSE, dissolve = FALSE, na.rm=FALSE) %>% # Convert to polygon data
@@ -343,16 +361,11 @@ PUs <- PUs %>%
   mutate(LogFishing = LogFishing)
 
 
-
 #' Plotting log of fishing cost
-
-LogFishing <- LogFishing %>% 
-  mutate(geometry = FishingCost$geometry) #trying to create a dataframe with LogFishing & geometry to be able to plot but Error in UseMethod("mutate") : 
-#no applicable method for 'mutate' applied to an object of class "c('double', 'numeric')"
 
 ggplot() + 
   geom_sf(data = world) +
-  geom_sf(data = PUs$LogFishing, aes(color=LogFishing)) + #Error: `data` must be a data frame, or other object coercible by `fortify()`, not a numeric vector.
+  geom_sf(data = PUs, aes(color=LogFishing)) + 
   ggtitle("Fishing Cost (Log10)") + 
   coord_sf(xlim = c(IndianO[["xmin"]], IndianO[["xmax"]]), ylim = c(IndianO[["ymin"]], IndianO[["ymax"]]), expand = FALSE)
 
@@ -385,7 +398,11 @@ plot(int, col='red', add=T) #correct
 #group data by county area and calculate the total arable land area per county
 #output as new tibble
 AreaCFCtotal <- int %>%
-  summarise(areaCFCtot = sum(CFCarea)) #2.256596e+12 [m^2], seems a lot?
+  summarise(areaCFCtot = sum(CFCarea)) #2.256596e+12 [m^2], seems a lot? Would be 2256596 sqkm, I don't even have that many PUs
+
+#' area of CFC in PUs < 2753 sqkm = 2.753e+09 sqm because
+#' sum(PUxCFC) 
+#' [1] 2753
 
 #change data type of areaArable field to numeric (to remove m^2 suffix)
 AreaCFCtotal$areaCFCtot <- as.numeric(AreaCFCtotal$areaCFCtot)
@@ -423,6 +440,10 @@ plot(int2, col='red', add=T) #correct
 AreaPMNtotal <- int2 %>%
   summarise(areaPMNtot = sum(PMNarea)) #1.933646e+12 [m^2], also seems a lot?
 
+#'area of PMN in PUs < 2075 sqkm because
+#'sum(PUxPMN)
+#'[1] 2075
+
 #change data type of areaArable field to numeric (to remove m^2 suffix)
 AreaPMNtotal$areaPMNtot <- as.numeric(AreaPMNtotal$areaPMNtot)
 
@@ -431,7 +452,7 @@ AreaPMNtotal$areaPMNtot <- as.numeric(AreaPMNtotal$areaPMNtot)
 #' Plotting mining resources
 
 world <- ne_countries(scale = "medium", returnclass = "sf")
-IndianO <- c(xmin = 17.47941, ymin = -38.7402, xmax = 129.552, ymax = 33.82872)
+#IndianO <- c(xmin = 17.47941, ymin = -38.7402, xmax = 129.552, ymax = 33.82872)
 CFC <- st_read("~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Costs/Mining_resources/Crust/Crust_areas_Hein2013.shp")
 PMN <- st_read ("~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Costs/Mining_resources/Nodules/Nodules_Hein2013.shp")
 ggplot() + 
@@ -447,28 +468,56 @@ ggplot() +
 
 #' ## Prioritizr problems
 
+PUs$Fishing[PUs$Fishing <  0.0001] <-  0.0001 #to avoid Warning in presolve_check.OptimizationProblem(compile(x)) :
+# planning units with very high (> 1e+6) or very low (< 1e-6) non-zero cost values note this may be a false positive
+
 #' IBA & Fishing cost
 
-p_ConsFeat_Fishing <- problem(PUs, features = "IBA", cost_column = "Fishing") %>% 
+p_IBA_Fishing <- problem(PUs, features = "IBA", cost_column = "Fishing") %>% 
   add_min_set_objective() %>%
+  add_relative_targets(0.9) %>%
   add_binary_decisions() %>%
   add_gurobi_solver(gap = 0.1, verbose = FALSE) 
 
-#' IMMA & Fishing cost & target
+p_IBA_Fishing_Sol <- solve(p_IBA_Fishing)
 
-p_ConsFeat_Fishing <- problem(PUs, features = "IMMA", cost_column = "Fishing") %>% 
-add_min_set_objective() %>%
-  add_relative_targets(0.3) %>%
-  add_binary_decisions() %>%
-  add_gurobi_solver(gap = 0.1, verbose = FALSE) 
+p_IBA_Fishing_Sol_Plot <- ggplot() +
+  ggtitle("IBA vs Fishing, Target = 0.9") +
+  geom_sf(data = world, colour ="grey70") +
+  geom_sf(data = p_IBA_Fishing_Sol, aes(fill = as.factor(solution_1)), size = 0.05) +
+  scale_fill_manual(values = c("NA", "red")) +
+  coord_sf(xlim = c(18, 130), ylim = c(22, -60), expand = FALSE) +
+  theme_bw() +
+  #scale_colour_gradientn(colours = colorspace::diverge_hcl(7)) +
+  theme(legend.title = element_blank(),
+        axis.title.x = element_blank(),
+        axis.title.y = element_blank())
 
-#' All features & Fishing cost
+p_IBA_Fishing_Sol_Plot #looks correct 
 
-p_ConsFeat_Fishing <- problem(PUs, features = "IBA", "IMMA", "NEIO_09", "NWIO_14", "SIO_11", "SIO_19", "SIO_22", "SIO_23", "SIO_30", "SIO_32", "SIO_35", "SIO_36", "SIO_37","Seamounts", "Plateaus", "Active_Vents", "Inactive_Vents", cost_column = "Fishing") %>% 
+#' Active Vents & Fishing cost & target
+
+p_Active_Vents_Fishing <- problem(PUs, features = "Active_Vents", cost_column = "Fishing") %>% 
   add_min_set_objective() %>%
+  add_relative_targets(0.7) %>%
   add_binary_decisions() %>%
   add_gurobi_solver(gap = 0.1, verbose = FALSE)
-#Error: unused arguments
+
+p_Active_Vents_Fishing_Sol <- solve(p_Active_Vents_Fishing)
+
+p_Active_Vents_Fishing_Sol_Plot <- ggplot() +
+  ggtitle("Active Vents vs Fishing, Targets = 0.7") +
+  geom_sf(data = world, colour ="grey80") +
+  geom_sf(data = p_Active_Vents_Fishing_Sol, aes(fill = as.factor(solution_1)), size = 0.05) +
+  scale_fill_manual(values = c("NA", "red")) +
+  coord_sf(xlim = c(18, 130), ylim = c(22, -60), expand = FALSE) +
+  theme_bw() +
+  #scale_colour_gradientn(colours = colorspace::diverge_hcl(7)) +
+  theme(legend.title = element_blank(),
+        axis.title.x = element_blank(),
+        axis.title.y = element_blank())
+
+p_Active_Vents_Fishing_Sol_Plot # also looks correct
 
 #' All features & Fishing cost & targets
 
@@ -477,8 +526,6 @@ p_ConsFeat_Fishing <- problem(PUs, features = c("IBA", "IMMA", "NEIO_09", "NWIO_
   add_relative_targets(c(0.3, 0.3, 0.3, 0.3, 0.3, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.3, 0.3, 0.7, 0.7)) %>%
   add_binary_decisions() %>%
   add_gurobi_solver(gap = 0.1, verbose = FALSE)
-
-#no error
 
 p_ConsFeat_Fishing_Sol <- solve(p_ConsFeat_Fishing)
 #plot(p_ConsFeat_Fishing_Sol, main = "solution")
@@ -489,10 +536,70 @@ p_ConsFeat_Fishing_Sol_Plot <- ggplot() +
   geom_sf(data = world, colour ="grey80") +
   geom_sf(data = p_ConsFeat_Fishing_Sol, aes(fill = as.factor(solution_1)), size = 0.05) +
   scale_fill_manual(values = c("NA", "red")) +
+  coord_sf(xlim = c(18, 130), ylim = c(22, -60), expand = FALSE) +
   theme_bw() +
   #scale_colour_gradientn(colours = colorspace::diverge_hcl(7)) +
   theme(legend.title = element_blank(),
         axis.title.x = element_blank(),
         axis.title.y = element_blank())
 
-p_ConsFeat_Fishing_Sol_Plot
+p_ConsFeat_Fishing_Sol_Plot # shows that fishing cost is reduced between 40°-60°S, but maybe would be good to reduce target for IBAs/IMMAs or assign Longhurst to distribute better across latitudes
+
+#' All features & Fishing cost & targets & locked-out exploration + reserved areas
+
+PUs["locked_out"] = PUs$ExplPMN | PUs$ExplPMS | PUs$ResPMN # create locked_out column (logical). If =<1 is TRUE, then locked_out is TRUE # https://stackoverflow.com/questions/54507486/merging-two-true-false-dataframe-columns-keeping-only-true
+
+#PUs["locked_out"] <- paste(PUs$ExplPMN, PUs$ExplPMS, PUs$ResPMN)
+#PUs %>% mutate(sum = rowSums(across(where(is.logical))))rowSums(Y) > 0
+#PUs$LockedOut <- ifelse(PUs$ExplPMN == "TRUE" | PUs$ExplPMS == "TRUE" | PUs$ResPMN == "TRUE")
+
+p_ConsFeat_Fishing_LockedOut <- problem(PUs, features = c("IBA", "IMMA", "NEIO_09", "NWIO_14", "SIO_11", "SIO_19", "SIO_22", "SIO_23", "SIO_30", "SIO_32", "SIO_35", "SIO_36", "SIO_37","Seamounts", "Plateaus", "Active_Vents", "Inactive_Vents"), cost_column = "Fishing") %>% 
+  add_min_set_objective() %>%
+  add_relative_targets(c(0.3, 0.3, 0.3, 0.3, 0.3, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.3, 0.3, 0.7, 0.7)) %>%
+  add_binary_decisions() %>%
+  add_locked_out_constraints(locked_out = "locked_out") %>%
+  add_gurobi_solver(gap = 0.1, verbose = FALSE)
+
+p_ConsFeat_Fishing_LockedOut_Sol <- solve(p_ConsFeat_Fishing_LockedOut)
+
+p_ConsFeat_Fishing_LockedOut_Sol_Plot <- ggplot() +
+  ggtitle("Cons Feats vs Fishing, Mining Contractors Out, 0.3<Targets<0.7") +
+  geom_sf(data = world, colour ="grey80") +
+  geom_sf(data = p_ConsFeat_Fishing_Sol, aes(fill = as.factor(solution_1)), size = 0.05) +
+  scale_fill_manual(values = c("NA", "red")) +
+  coord_sf(xlim = c(18, 130), ylim = c(22, -60), expand = FALSE) +
+  theme_bw() +
+  #scale_colour_gradientn(colours = colorspace::diverge_hcl(7)) +
+  theme(legend.title = element_blank(),
+        axis.title.x = element_blank(),
+        axis.title.y = element_blank())
+
+p_ConsFeat_Fishing_LockedOut_Sol_Plot
+
+
+#' All features & Fishing cost & targets & locked-out exploration + reserved areas, change targets to check solver works
+
+length(PUs$Plateaus[PUs$Plateaus==TRUE]) # check count of PUs that have plateaus inside
+
+p_check_targets <- problem(PUs, features = c("IBA", "IMMA", "NEIO_09", "NWIO_14", "SIO_11", "SIO_19", "SIO_22", "SIO_23", "SIO_30", "SIO_32", "SIO_35", "SIO_36", "SIO_37","Seamounts", "Plateaus", "Active_Vents", "Inactive_Vents"), cost_column = "Fishing") %>% 
+  add_min_set_objective() %>%
+  add_relative_targets(c(0.001, 0.001, 0.03, 0.03, 0.03, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.99, 0.99, 0.99, 0.99)) %>%
+  add_binary_decisions() %>%
+  add_locked_out_constraints(locked_out = "locked_out") %>%
+  add_gurobi_solver(gap = 0.1, verbose = FALSE)
+
+p_check_targets_sol <- solve(p_check_targets)
+
+p_check_targets_sol_plot <- ggplot() +
+  ggtitle("0.001<Targets<0.9") +
+  geom_sf(data = world, colour ="grey80") +
+  geom_sf(data = p_ConsFeat_Fishing_Sol, aes(fill = as.factor(solution_1)), size = 0.05) +
+  scale_fill_manual(values = c("NA", "red")) +
+  coord_sf(xlim = c(18, 130), ylim = c(22, -60), expand = FALSE) +
+  theme_bw() +
+  #scale_colour_gradientn(colours = colorspace::diverge_hcl(7)) +
+  theme(legend.title = element_blank(),
+        axis.title.x = element_blank(),
+        axis.title.y = element_blank())
+
+p_check_targets_sol_plot
