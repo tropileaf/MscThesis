@@ -2,7 +2,7 @@
 #' title: "Cross-sectoral spatial planning"
 #' author: "Lea Fourchault"
 #' affiliation: "UQ/CSIRO/UNSW/Tropimundo"
-#' date: "Last compiled on July 12th, 2022"
+#' date: "Last compiled on August 5th, 2022"
 #' output: 
 #'   html_document
 #' ---
@@ -14,30 +14,33 @@
 #' 
 #' The code depends on `sf`, `terra`, `tidyverse`, `rnaturalearth`, `prioritizr`, `stars`, `patchwork`, `exactextractr`.    
 #' 
-#' To use this code, you will need to download and expand `MME1DATA-Q1215/SpatialPlanning/Data.zip` to the directory `GitHub/SpatialPlanning/Data/`. Note that this version does not use Aquamaps.
+#' To use this code, you will need to:
+#' - install Gurobi or CBC (rcbc). Change accordingly: 'add_cbc_solver', 'verbose = TRUE'
+#' - download and expand `MME1DATA-Q1215/SpatialPlanning/Data.zip` to the directory `GitHub/SpatialPlanning/Data/`. Note that this version does not use Aquamaps.
+#' - OR load the 'PUs_full.RData' shared with the SERM Lab (Vrije Universiteit Brussels, Pr. Dahdouh-Guebas).
+#' - replace the file paths with your file paths
 #' 
-#' Contact: Lea Fourchault or Jason D. Everett or Camille K. V. Buenafe from the MME at UQ.
+#' Contact: Lea Fourchault (lea.fourchault(at)wanadoo.fr) or Jason D. Everett or Camille K. V. Buenafe from the Mathematical Marine Ecology Lab at the University of Queensland.
 #' 
-#' ## Preliminaries 
+#' Keywords: planning region, PUs, conservation features, lock out, CFC, PMN, exact_extractr, replacement, summary, cross-sectoral, circular barplot, kappa, plotting, visual abstract
 #' 
-source("SpatPlan_Extras.R") # Load the extras, including functions and libraries
+#' Preliminaries 
+#' 
+source("SpatPlan_Extras.R") # Load the extras, including functions and libraries from the Spatial Planning Repo: https://github.com/MathMarEcol/SpatialPlanning
 
 if (!file.exists("Data")) {
   stop("The Data folder does not exist at SpatialPlanning/Data. Please download from the RDM and then try again.")
 }
 
-
-##' Define region and boundary
+##' Define planning region and boundary
 
 cCRS <- "+proj=moll +lon_0=0 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs" # Mollweide projection ESRI:54009 to ensure equal area of PUs across latitude
 
 world <- ne_countries(scale = "medium", returnclass = "sf")%>%
   st_transform(cCRS) # apply Mollweide projection to background worldmap
 
-saveRDS(world, paste0("~/Documents/MscThesis/GitHub/SpatialPlanning/rds", "world.rds"))
-
 Region <- c(xmin = 18, xmax = 120, ymin = -45, ymax = 34) # Indian Ocean, adjusted to include ecological data of interest and exclude low-quality fishing cost data
-Bndry <- fSpatPlan_Get_Boundary(Region, cCRS) # boundary of plannin region
+Bndry <- fSpatPlan_Get_Boundary(Region, cCRS) # boundary of planning region
 
 #' Intersect bndry and high seas (ABNJ)
 
@@ -54,14 +57,11 @@ PU_size <- 1000 # in km2 at the surface
 Shape <- "hexagon" # shape of PUs
 PUs <- fSpatPlan_Get_PlanningUnits(BndryABNJ, world, PU_size, Shape) # modified PUs with ABNJ only
 
-saveRDS(PUs, paste0("~/Documents/MscThesis/GitHub/SpatialPlanning/rds", "PUs.rds"))
-
 #' Plot PUs
 
 (ggPU <- fSpatPlan_PlotPUs(PUs, world)) 
 
-#' ## Get the conservation features 
-#' 
+#' ## New function to get the conservation features 
 #' 
 fSpatPlan_Get_Polyg <- function(filen, PUs){ # to overlay PUs & GIS vector files (such as filen.shp)
 
@@ -194,8 +194,6 @@ PUs <- PUs %>%
 saveRDS(PUxVentsInactive, paste0("~/Documents/MscThesis/GitHub/SpatialPlanning/rds", "PUxVentsInactive.rds"))
 saveRDS(PUxVentsActive, paste0("~/Documents/MscThesis/GitHub/SpatialPlanning/rds", "PUxVentsActive.rds"))
 
-saveRDS(PUs, paste0("~/Documents/MscThesis/GitHub/SpatialPlanning/rds", "PUs_cons_feats.rds"))
-
 # Check features size
 
 length(PUs$IMMA[PUs$IMMA==TRUE]) # 1107
@@ -233,7 +231,7 @@ PUxResPMN <- fSpatPlan_Get_Polyg(ResPMN, PUs)
 PUs <- PUs %>% 
   mutate(ResPMN = PUxResPMN)
 
-## lock out exploration areas and reserved areas
+## Lock out exploration areas and reserved areas
 
 PUs["locked_out_areas"] = PUs$ExplPMN | PUs$ExplPMS | PUs$ResPMN # create locked_out column of exploration and reserved mining areas (logical). If =<1 is TRUE, then locked_out is TRUE # https://stackoverflow.com/questions/54507486/merging-two-true-false-dataframe-columns-keeping-only-true
 
@@ -247,11 +245,8 @@ CFC <- st_read("~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Costs/Mining_re
 CFCMoll <- st_transform(CFC, cCRS) # Mollweide proj
 
 #run the intersect function, converting the output to a tibble in the process
-#int <- as_tibble(st_intersection(CFCRobin, BndryABNJ))
 int <- st_intersection(CFCMoll, BndryABNJ)
-
-#add in an area count column to the tibble (area of each CFC poly in intersect layer)
-int$CFCarea <- st_area(int)
+int$CFCarea <- st_area(int) #add in an area count column to the tibble (area of each CFC poly in intersect layer)
 
 #plot the layers to visually check result of intersect
 plot (CFCMoll$geometry, col='green')
@@ -259,14 +254,13 @@ plot(BndryABNJ$geometry, add=T)
 plot(int, col='red', add=T) #correct
 
 #group data by county area and calculate the total arable land area per county
-#output as new tibble
 AreaCFCtotal <- int %>%
   summarise(areaCFCtot = sum(CFCarea)) #  2.620621e+12 [m^2] with Mollweide but = 2.256596e+12 [m^2] with Robinson
 
 #change data type of areaArable field to numeric (to remove m^2 suffix)
 AreaCFCtotal$areaCFCtot <- as.numeric(AreaCFCtotal$areaCFCtot)
 
-## check: load county areas polygon shapefile 
+##' Check: load shapefile 
 
 CFC <- "~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Costs/Mining_resources/Crust/Crust_areas_Hein2013.shp"
 PUxCFC <- fSpatPlan_Get_Polyg(CFC, PUs)  
@@ -274,21 +268,18 @@ PUs <- PUs %>%
   mutate(CFC = PUxCFC)
 
 #'area of CFC in PUs < 2607*1000 sqkm but RECHECK
-sum(PUxCFC) #'[1] 2607 RECHECK but seems in line with result above
+sum(PUxCFC) #'[1] 2607 seems in line with result above
 
 #' PMN value
 
-#load PMN areas polygon shapefile 
+#load PMN areas polygon shape file 
 
 PMN <- st_read("~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Costs/Mining_resources/Nodules/Nodules_Hein2013.shp")
 PMNMoll <- st_transform(PMN, cCRS) # Mollweide proj
 
 #run the intersect function, converting the output to a tibble in the process
-#int <- as_tibble(st_intersection(CFCRobin, BndryABNJ))
 int2 <- st_intersection(PMNMoll, BndryABNJ)
-
-#add in an area count column to the tibble (area of each CFC poly in intersect layer)
-int2$PMNarea <- st_area(int2)
+int2$PMNarea <- st_area(int2) #add in an area count column to the tibble (area of each CFC poly in intersect layer)
 
 #plot the layers to visually check result of intersect
 plot (PMNMoll$geometry, col='green')
@@ -296,14 +287,13 @@ plot(BndryABNJ$geometry, add=T)
 plot(int2, col='red', add=T) #correct
 
 #group data by county area and calculate the total arable land area per county
-#output as new tibble
 AreaPMNtotal <- int2 %>%
   summarise(areaPMNtot = sum(PMNarea)) # 2.423256e+12 [m^2] with Mollweide but = 1.933646e+12 [m^2] with Robinson
 
 #change data type of areaArable field to numeric (to remove m^2 suffix)
 AreaPMNtotal$areaPMNtot <- as.numeric(AreaPMNtotal$areaPMNtot)
 
-## check: load county areas polygon shapefile 
+## Check: load areas polygon shapefile 
 
 PMN <- "~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Costs/Mining_resources/Nodules/Nodules_Hein2013.shp"
 PUxPMN <- fSpatPlan_Get_Polyg(PMN, PUs)  
@@ -311,14 +301,13 @@ PUs <- PUs %>%
   mutate(PMN = PUxPMN)
 
 #'area of PMN in PUs < 2422*1000 sqkm but RECHECK
-sum(PUxPMN) #'[1] 2422 RECHECK but seems in line with result above
+sum(PUxPMN) #'[1] 2422 seems in line with result above
 
-#' Possible valuation of PMN for Indian Ocean = 320 USD/t (CRU, 2019) * 0.0056 t/sqm (Sharma et al., 2011) * 1.933646e+12 sqm (total PMN area in Indian Ocean, from shapefiles from ISA & chunk above) = USD 3.46509363e+12 for all PMN in the Indian Ocean (seems too much)
+#' Possible valuation of PMN for Indian Ocean = 320 USD/t (CRU, 2019) * 0.0056 t/sqm (Sharma et al., 2011) * 1.933646e+12 sqm (total PMN area in Indian Ocean, from shapefiles from ISA & chunk above) = USD 3.46509363e+12 for all PMN in the Indian Ocean (seems too much) # see S3 in Lea's thesis
 
 #' Get mineral shp with USD value into raster
 
 # load CFC areas polygon shapefile 
-
 sfCFC <- st_read("~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Costs/Mining_resources/Crust/Crust_areas_Hein2013.shp")%>%
  st_transform(cCRS) # Mollweide proj
 
@@ -326,19 +315,15 @@ sfPMN <- st_read("~/Documents/MscThesis/GitHub/SpatialPlanning/Shp/Costs/Mining_
   st_transform(cCRS) # Mollweide proj
 
 # attribute average cost to mineral type (based on area covered, calculation of area explained with intersection above) + equation to get sqkm value outlined in Msc thesis
-
-sfCFC$value <- 94569.447 # sqkm USD value (might depend based on estimates of metal concentration and bulk density and crust thickness, see Mitzell et al., 2022 iin Sharma, 2022; might depend on metal prices, see Li et al., 2022)
-
+sfCFC$value <- 94569.447 # sqkm USD value (might depend based on estimates of metal concentration and bulk density and crust thickness, see Mizell et al., 2022 in Sharma, 2022; might depend on metal prices, see Li et al., 2022)
 sfPMN$value <- 14307812.057 # sqkm USD value (idem)
 
 # create template raster based on PU to matching resolution, and intersect with sf objects (also because high resolution, e.g. res=100 generates error)
-
 rPUs <- raster::raster(PUs, res=1000) # Formal class RasterLayer, resolution 1 sqkm
 rCFC <- fasterize::fasterize(sfCFC, rPUs, field = "value") 
 rPMN <- fasterize::fasterize(sfPMN, rPUs, field = "value") 
 
-# extract sum of all pixel values contained in each PU to get sum of USD value of all minerals
-
+#extract sum of all pixel values contained in each PU to get sum of USD value of all minerals
 PUxrCFC <- exactextractr::exact_extract(rCFC, PUs, "sum") # attribute sum of value of pixels in each PU to PU
 PUs <- PUs %>% #seems like NaN become 0s on their own?? after you click to check sfCFC and sfPMN?
   mutate(CFCValue = PUxrCFC)
@@ -347,15 +332,11 @@ PUxrPMN <- exactextractr::exact_extract(rPMN, PUs, "sum") # attribute sum of val
 PUs <- PUs %>% 
   mutate(PMNValue = PUxrPMN) #seems like NaN become 0s on their own?? after you click to check sfCFC and sfPMN?
 
-# get total mineral resource value per PU
-
+#get total mineral resource value per PU
 PUs$MiningCost <- PUs$CFCValue + PUs$PMNValue
-
 max(PUs$MiningCost) # USD 14307812352, correct
 
 ##' Get the fishing-specific cost layer
-
-# the method below is the same as for shipping and mining - might be better to have consistent method to compare? also, max and mean value make more sense like this, I think, and we are sure to have the sum of values per PU
 
 FishingRaster <- terra::rast("Data/Cost/Cost_Raster_Sum.grd")
 FishingRobin <- terra::project(FishingRaster, "ESRI:54009") # transform to Mollweide proj
@@ -367,8 +348,6 @@ max(PUs$Fishing)
 #[1] 9523.993 USD/PU/yr
 mean(PUs$Fishing)
 #[1] 57.31064 USD/PU/yr
-
-#(ggCost <- fSpatPlan_PlotCost(Cost, world)) # Plot cost
 
 ##' Get the shipping-specific cost layer
 
@@ -383,9 +362,7 @@ max(PUs$ShippingIntensity)
 mean(PUs$ShippingIntensity)
 #[1] 6336.166
 
-saveRDS(PUs, paste0("~/Documents/MscThesis/GitHub/SpatialPlanning/rds", "PUs_full.rds"))
-
-##' Prioritizr problems_ sector-specific plans
+##' Prioritizr problems: sector-specific plans
 
 #' FishPlan problem 
 
@@ -426,7 +403,6 @@ add_min_set_objective() %>%
   add_cbc_solver(gap = 0, verbose = TRUE)
 
 p_MinePlanA_Sol <- solve(p_MinePlanA, force = TRUE) # need force = TRUE because planning units with very high (> 1e+6) cost values
-
 
 #' ShipPlan problems (ShipPlan = shipping intensity as cost, no USD values)
 
@@ -503,6 +479,7 @@ ShipTargetSumA <- eval_target_coverage_summary(p_ShipPlanA, df3)
 #' relative cost = cost(sector_specific_plan_solution)/sum(PUs$sectoral_cost_layer)*100
 #' depending on available time and precision needed, change increments
 #' 
+PUs$Area <- 1
 for (i in seq(0.0, 0.02, by= 0.01)){ #0.00 because min shipping budget to solve shipping-specific problem = 0.6% = 0.006 < 0.01 and we use increments of 0.01
   for (j in seq(0.01, 0.03, by= 0.01)){ #0.01 because min mining budget to solve mining-specific problem = 1.6% = 0.016
     for (k in seq(0.19, 0.21, by= 0.01)){ #0.19 because min fishing budget to solve fishing-specific problem = 19.5% = 0.19
@@ -554,7 +531,6 @@ p_PlanFinal <- problem(PUs, features = c("IBA", "IMMA", "NEIO_09", "NWIO_14", "S
   add_cbc_solver(gap = 0, verbose = TRUE)
 
 p_PlanFinal_Sol <- solve(p_PlanFinal, force = TRUE) # all good!
-
 
 ##' Sensitivity analysis
 ##' Sector-specific plans
@@ -955,8 +931,6 @@ MinePU_No_vents  <- eval_n_summary(p_MinePlan_No_vents, df_No_vents)  #
 
 ##' Sensitivity of cross-sectoral plan to budgets
 ## Change increments and max budgets as needed
-
-PUs$Area <- 1
 
 df_inc0.01 <- data.frame() #create empty dataframe to add to with each iteration
 for (i in seq(0.01, 0.11, by= 0.01)){ #0.01 because min shipping budget to solve cross-sectoral problem = 1%
@@ -2048,14 +2022,6 @@ temp7<- ggplot() +
   geom_sf(data = world_valid%>% rotate_data(), fill = "grey20", size = 0.05, show.legend = FALSE) +
   theme_void()
 
-temp7<- ggplot() +
-  
-  geom_sf(data = PUs%>% rotate_data(), color = "white", show.legend = FALSE) +
-  geom_sf(data = p_FishPlanA_Sol%>% rotate_data(), aes(fill = as.factor(solution_1)), size = 0.01) +
-  sc_mine +
-  geom_sf(data = world_valid%>% rotate_data(), fill = "grey20", size = 0.05, show.legend = FALSE) +
-  theme_void()
-
-##' THAT'S ALL; WELL DONE!
+##' That's all :)
 
 
