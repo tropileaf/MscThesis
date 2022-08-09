@@ -929,6 +929,99 @@ MineBound_No_vents <- eval_boundary_summary(p_MinePlan_No_vents, df_No_vents) #
 MineCost_No_vents  <- eval_cost_summary(p_MinePlan_No_vents, df_No_vents) # 
 MinePU_No_vents  <- eval_n_summary(p_MinePlan_No_vents, df_No_vents)  #
 
+##' Sensitivity of reserve size to targets
+
+# For the fishing plan
+
+df_PU_targets_fish <- data.frame() #create empty dataframe to add to with each iteration
+for (i in seq(0.1, 0.9, by= 0.1)){ 
+  target <- rep(c(i),times=17)
+  p_FishPlanTargets <- problem(PUs, features = c("IBA", "IMMA", "NEIO_09", "NWIO_14", "SIO_11", "SIO_19", "SIO_22", "SIO_23", "SIO_30", "SIO_32", "SIO_35", "SIO_36", "SIO_37","Seamounts", "Plateaus", "Active_Vents", "Inactive_Vents"), cost_column = "Fishing") %>% 
+    add_min_set_objective() %>%
+    add_relative_targets(target) %>% #inactive vents target = 0.3, active vents  = 0.68, otherwise unfeasible
+    add_binary_decisions() %>%
+    #add_locked_out_constraints(locked_out = "locked_out_areas") %>%
+    add_cbc_solver(gap = 0, verbose = TRUE)
+  
+  p_FishPlanTargets_sol <- solve(p_FishPlanTargets, force = TRUE) 
+  
+  #extract the information you're interested in
+  
+  df_sol <- p_FishPlanTargets_sol%>%
+    dplyr::select(geometry, solution_1)
+  
+  cost <- eval_n_summary(p_FishPlanTargets, df_sol) # 
+  
+  total <- cbind(data.frame(cost), data.frame(i)) #
+  df_PU_targets_fish <- rbind(df_PU_targets_fish, data.frame(total)) #add to to dataframe
+}
+
+# For the mining plan
+
+df_PU_targets_mine <- data.frame() #create empty dataframe to add to with each iteration
+for (i in seq(0.1, 0.9, by= 0.1)){ 
+  target <- rep(c(i),times=17)
+  p_MinePlanTargets <- problem(PUs, features = c("IBA", "IMMA", "NEIO_09", "NWIO_14", "SIO_11", "SIO_19", "SIO_22", "SIO_23", "SIO_30", "SIO_32", "SIO_35", "SIO_36", "SIO_37","Seamounts", "Plateaus", "Active_Vents", "Inactive_Vents"), cost_column = "MiningCost") %>% 
+    add_min_set_objective() %>%
+    add_relative_targets(target) %>% #inactive vents target = 0.3, active vents  = 0.68, otherwise unfeasible
+    add_binary_decisions() %>%
+    #add_locked_out_constraints(locked_out = "locked_out_areas") %>%
+    add_cbc_solver(gap = 0, verbose = TRUE)
+  
+  p_MinePlanTargets_sol <- solve(p_MinePlanTargets, force = TRUE) 
+  
+  #extract the information you're interested in
+  
+  df_sol <- p_MinePlanTargets_sol%>%
+    dplyr::select(geometry, solution_1)
+  
+  cost <- eval_n_summary(p_MinePlanTargets, df_sol) # 
+  
+  total <- cbind(data.frame(cost), data.frame(i)) #
+  df_PU_targets_mine <- rbind(df_PU_targets_mine, data.frame(total)) #add to to dataframe
+}
+
+# For the shipping plan
+
+df_PU_targets_ship <- data.frame() #create empty dataframe to add to with each iteration
+for (i in seq(0.1, 0.9, by= 0.1)){ 
+  target <- rep(c(i),times=17)
+  p_ShipPlanTargets <- problem(PUs, features = c("IBA", "IMMA", "NEIO_09", "NWIO_14", "SIO_11", "SIO_19", "SIO_22", "SIO_23", "SIO_30", "SIO_32", "SIO_35", "SIO_36", "SIO_37","Seamounts", "Plateaus", "Active_Vents", "Inactive_Vents"), cost_column = "ShippingIntensity") %>% 
+    add_min_set_objective() %>%
+    add_relative_targets(target) %>% #inactive vents target = 0.3, active vents  = 0.68, otherwise unfeasible
+    add_binary_decisions() %>%
+    #add_locked_out_constraints(locked_out = "locked_out_areas") %>%
+    add_cbc_solver(gap = 0, verbose = TRUE)
+  
+  p_ShipPlanTargets_sol <- solve(p_ShipPlanTargets, force = TRUE) 
+  
+  #extract the information you're interested in
+  
+  df_sol <- p_ShipPlanTargets_sol%>%
+    dplyr::select(geometry, solution_1)
+  
+  cost <- eval_n_summary(p_ShipPlanTargets, df_sol) # 
+  
+  total <- cbind(data.frame(cost), data.frame(i)) #
+  df_PU_targets_ship <- rbind(df_PU_targets_ship, data.frame(total)) #add to to dataframe
+}
+
+### create df with all plans
+
+df_total <- rbind(df_PU_targets_fish, df_PU_targets_ship, df_PU_targets_mine)
+Legend=c( rep('Fishing', 9), rep('Shipping', 9), rep('Mining', 9))
+
+df_total$Legend <- Legend
+
+### plotting
+
+p <- ggplot(df_total, aes(x=i*100, y=cost, shape=Legend)) + 
+  geom_point(size=2, color="grey30") +
+  scale_x_continuous(breaks = seq(0, 100, by = 10)) +
+  theme_bw()
+p + ggtitle("Increase in reserve size with increase in targets") +
+  xlab("Targets (%)") + ylab("Reserve size (PUs)")
+
 ##' Sensitivity of cross-sectoral plan to budgets
 ## Change increments and max budgets as needed
 
@@ -1808,10 +1901,10 @@ p_const_fish <- ggplot(df_constant_fish001, aes(i, j)) +
         legend.title = element_text(size = 11),
         legend.text = element_text(size = 10),
         legend.key.width = unit(0.7,"cm")) +
-  scale_fill_distiller(palette = 'RdYlBu') +
+  scale_fill_distiller(palette = 'PuBuGn') +
   labs(x="Shipping threshold",
        y="Mining threshold",
- title = "Co-varying thresholds for the shipping and mining sectors")
+ title = "Varying thresholds for the shipping and mining sectors")
 
 ggplotly(p_const_fish)
 
@@ -1828,10 +1921,10 @@ p_const_mine <- ggplot(df_constant_mine001, aes(i, k)) +
         legend.title = element_text(size = 11),
         legend.text = element_text(size = 10),
         legend.key.width = unit(0.7,"cm")) +
-  scale_fill_distiller(palette = "RdYlBu") +
+  scale_fill_distiller(palette = "PuBuGn") +
   labs(x="Shipping threshold",
        y="Fishing threshold",
-       title = "Co-varying thresholds for the shipping and fishing sectors")
+       title = "Varying thresholds for the shipping and fishing sectors")
 
 ggplotly(p_const_mine)
 
@@ -1840,7 +1933,7 @@ ggplotly(p_const_mine)
 df_constant_ship001 <- subset(df_inc0.01, subset=!(i > 0.01))
 p_const_ship <- ggplot(df_constant_ship001, aes(j, k)) +
   geom_raster(aes(fill=cost)) +
-  scale_fill_distiller(palette = "RdYlBu") +
+  scale_fill_distiller(palette = "PuBuGn") +
   theme_bw() +
   theme(axis.text.x = element_text(size = 10),
         axis.text.y = element_text(size = 10),
@@ -1849,7 +1942,7 @@ p_const_ship <- ggplot(df_constant_ship001, aes(j, k)) +
         legend.key.width = unit(0.7,"cm")) +
   labs(x="Mining threshold",
        y="Fishing threshold",
-       title = "Co-varying thresholds for the mining and fishing sectors")
+       title = "Varying thresholds for the mining and fishing sectors")
 
 ggplotly(p_const_ship)
 
